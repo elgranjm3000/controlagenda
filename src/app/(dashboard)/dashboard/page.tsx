@@ -17,7 +17,7 @@ import {
 } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell } from 'recharts';
 
-// Mock data - Replace with actual API calls
+// Datos de ejemplo - Reemplazar con llamadas reales a la API
 const mockData = {
   stats: {
     todayAppointments: 12,
@@ -26,26 +26,26 @@ const mockData = {
     occupancyRate: 78,
   },
   recentAppointments: [
-    { id: 1, client: 'Maria Garcia', service: 'Premium Facial', time: '10:00 AM', status: 'confirmed' },
-    { id: 2, client: 'John Smith', service: 'Hair Cut', time: '11:30 AM', status: 'completed' },
-    { id: 3, client: 'Sarah Johnson', service: 'Massage Therapy', time: '2:00 PM', status: 'in-progress' },
-    { id: 4, client: 'David Brown', service: 'Manicure', time: '3:30 PM', status: 'confirmed' },
+    { id: 1, client: 'María García', service: 'Facial Premium', time: '10:00 AM', status: 'confirmada' },
+    { id: 2, client: 'Juan Silva', service: 'Corte de Cabello', time: '11:30 AM', status: 'completada' },
+    { id: 3, client: 'Sandra Jiménez', service: 'Terapia de Masajes', time: '2:00 PM', status: 'en-progreso' },
+    { id: 4, client: 'Diego Morales', service: 'Manicura', time: '3:30 PM', status: 'confirmada' },
   ],
   salesData: [
-    { date: 'Mon', revenue: 1200, appointments: 8 },
-    { date: 'Tue', revenue: 1450, appointments: 10 },
-    { date: 'Wed', revenue: 1100, appointments: 7 },
-    { date: 'Thu', revenue: 1650, appointments: 12 },
-    { date: 'Fri', revenue: 1800, appointments: 14 },
-    { date: 'Sat', revenue: 2200, appointments: 18 },
-    { date: 'Sun', revenue: 1300, appointments: 9 },
+    { date: 'Lun', revenue: 1200, appointments: 8 },
+    { date: 'Mar', revenue: 1450, appointments: 10 },
+    { date: 'Mié', revenue: 1100, appointments: 7 },
+    { date: 'Jue', revenue: 1650, appointments: 12 },
+    { date: 'Vie', revenue: 1800, appointments: 14 },
+    { date: 'Sáb', revenue: 2200, appointments: 18 },
+    { date: 'Dom', revenue: 1300, appointments: 9 },
   ],
   serviceDistribution: [
-    { name: 'Facial Treatments', value: 35, color: '#8B5CF6' },
-    { name: 'Hair Services', value: 25, color: '#3B82F6' },
-    { name: 'Massage Therapy', value: 20, color: '#10B981' },
-    { name: 'Nail Services', value: 15, color: '#F59E0B' },
-    { name: 'Other', value: 5, color: '#EF4444' },
+    { name: 'Tratamientos Faciales', value: 35, color: '#8B5CF6' },
+    { name: 'Servicios de Cabello', value: 25, color: '#3B82F6' },
+    { name: 'Terapia de Masajes', value: 20, color: '#10B981' },
+    { name: 'Servicios de Uñas', value: 15, color: '#F59E0B' },
+    { name: 'Otros', value: 5, color: '#EF4444' },
   ],
 };
 
@@ -78,10 +78,10 @@ const StatCard = ({ title, value, change, icon: Icon, trend }: any) => (
 
 const AppointmentStatusBadge = ({ status }: { status: string }) => {
   const colors = {
-    confirmed: 'bg-blue-100 text-blue-800',
-    completed: 'bg-green-100 text-green-800',
-    'in-progress': 'bg-yellow-100 text-yellow-800',
-    cancelled: 'bg-red-100 text-red-800',
+    confirmada: 'bg-blue-100 text-blue-800',
+    completada: 'bg-green-100 text-green-800',
+    'en-progreso': 'bg-yellow-100 text-yellow-800',
+    cancelada: 'bg-red-100 text-red-800',
   };
 
   return (
@@ -100,16 +100,23 @@ export default function DashboardPage() {
     return () => clearInterval(timer);
   }, []);
 
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat('es-CL', {
+      style: 'currency',
+      currency: 'CLP',
+    }).format(amount);
+  };
+
   return (
     <div className="space-y-8 animate-fade-in">
-      {/* Header */}
+      {/* Encabezado */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">
-            Welcome back, {user?.name}!
+            ¡Bienvenido de vuelta, {user?.name}!
           </h1>
           <p className="text-gray-600 mt-1">
-            {currentTime.toLocaleDateString('en-US', { 
+            {currentTime.toLocaleDateString('es-CL', { 
               weekday: 'long', 
               year: 'numeric', 
               month: 'long', 
@@ -120,50 +127,50 @@ export default function DashboardPage() {
         <div className="flex space-x-4 mt-4 sm:mt-0">
           <Button className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700">
             <Calendar className="w-4 h-4 mr-2" />
-            New Appointment
+            Nueva Cita
           </Button>
         </div>
       </div>
 
-      {/* Stats Cards */}
+      {/* Tarjetas de Estadísticas */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
         <StatCard
-          title="Today's Appointments"
+          title="Citas de Hoy"
           value={mockData.stats.todayAppointments}
-          change="+2 from yesterday"
+          change="+2 desde ayer"
           trend="up"
           icon={Calendar}
         />
         <StatCard
-          title="Today's Revenue"
-          value={`$${mockData.stats.todayRevenue.toLocaleString()}`}
-          change="+12% from yesterday"
+          title="Ingresos de Hoy"
+          value={formatCurrency(mockData.stats.todayRevenue)}
+          change="+12% desde ayer"
           trend="up"
           icon={DollarSign}
         />
         <StatCard
-          title="New Clients This Week"
+          title="Nuevos Clientes Esta Semana"
           value={mockData.stats.newClientsThisWeek}
-          change="+3 from last week"
+          change="+3 desde la semana pasada"
           trend="up"
           icon={Users}
         />
         <StatCard
-          title="Occupancy Rate"
+          title="Tasa de Ocupación"
           value={`${mockData.stats.occupancyRate}%`}
-          change="-5% from last week"
+          change="-5% desde la semana pasada"
           trend="down"
           icon={TrendingUp}
         />
       </div>
 
-      {/* Charts Row */}
+      {/* Fila de Gráficos */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Revenue Chart */}
+        {/* Gráfico de Ingresos */}
         <Card className="hover-lift">
           <CardHeader>
-            <CardTitle>Weekly Revenue</CardTitle>
-            <CardDescription>Revenue and appointments for the past 7 days</CardDescription>
+            <CardTitle>Ingresos Semanales</CardTitle>
+            <CardDescription>Ingresos y citas de los últimos 7 días</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="h-80">
@@ -174,8 +181,8 @@ export default function DashboardPage() {
                   <YAxis />
                   <Tooltip 
                     formatter={(value, name) => [
-                      name === 'revenue' ? `$${value}` : value,
-                      name === 'revenue' ? 'Revenue' : 'Appointments'
+                      name === 'revenue' ? formatCurrency(Number(value)) : value,
+                      name === 'revenue' ? 'Ingresos' : 'Citas'
                     ]}
                   />
                   <Line 
@@ -198,11 +205,11 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
 
-        {/* Service Distribution */}
+        {/* Distribución de Servicios */}
         <Card className="hover-lift">
           <CardHeader>
-            <CardTitle>Service Distribution</CardTitle>
-            <CardDescription>Popular services this month</CardDescription>
+            <CardTitle>Distribución de Servicios</CardTitle>
+            <CardDescription>Servicios populares este mes</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="h-80">
@@ -220,7 +227,7 @@ export default function DashboardPage() {
                       <Cell key={`cell-${index}`} fill={entry.color} />
                     ))}
                   </Pie>
-                  <Tooltip formatter={(value) => [`${value}%`, 'Percentage']} />
+                  <Tooltip formatter={(value) => [`${value}%`, 'Porcentaje']} />
                 </PieChart>
               </ResponsiveContainer>
             </div>
@@ -228,15 +235,15 @@ export default function DashboardPage() {
         </Card>
       </div>
 
-      {/* Recent Appointments */}
+      {/* Citas Recientes */}
       <Card className="hover-lift">
         <CardHeader className="flex flex-row items-center justify-between">
           <div>
-            <CardTitle>Today's Appointments</CardTitle>
-            <CardDescription>Upcoming and ongoing appointments</CardDescription>
+            <CardTitle>Citas de Hoy</CardTitle>
+            <CardDescription>Próximas citas y en curso</CardDescription>
           </div>
           <Button variant="outline" size="sm">
-            View All
+            Ver Todas
           </Button>
         </CardHeader>
         <CardContent>
@@ -260,7 +267,7 @@ export default function DashboardPage() {
                     <AppointmentStatusBadge status={appointment.status} />
                   </div>
                   <Button variant="ghost" size="sm">
-                    View
+                    Ver
                   </Button>
                 </div>
               </div>
@@ -269,15 +276,15 @@ export default function DashboardPage() {
         </CardContent>
       </Card>
 
-      {/* Quick Actions */}
+      {/* Acciones Rápidas */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <Card className="hover-lift cursor-pointer group">
           <CardContent className="p-6 text-center">
             <div className="w-12 h-12 bg-purple-100 rounded-full flex items-center justify-center mx-auto mb-4 group-hover:bg-purple-200 transition-colors">
               <CalendarCheck className="w-6 h-6 text-purple-600" />
             </div>
-            <h3 className="font-semibold text-gray-900 mb-2">Book Appointment</h3>
-            <p className="text-sm text-gray-600">Schedule a new appointment for your clients</p>
+            <h3 className="font-semibold text-gray-900 mb-2">Agendar Cita</h3>
+            <p className="text-sm text-gray-600">Programa una nueva cita para tus clientes</p>
           </CardContent>
         </Card>
 
@@ -286,8 +293,8 @@ export default function DashboardPage() {
             <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4 group-hover:bg-blue-200 transition-colors">
               <UserPlus className="w-6 h-6 text-blue-600" />
             </div>
-            <h3 className="font-semibold text-gray-900 mb-2">Add Client</h3>
-            <p className="text-sm text-gray-600">Register a new client to your system</p>
+            <h3 className="font-semibold text-gray-900 mb-2">Agregar Cliente</h3>
+            <p className="text-sm text-gray-600">Registra un nuevo cliente en tu sistema</p>
           </CardContent>
         </Card>
 
@@ -296,8 +303,8 @@ export default function DashboardPage() {
             <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4 group-hover:bg-green-200 transition-colors">
               <Clock className="w-6 h-6 text-green-600" />
             </div>
-            <h3 className="font-semibold text-gray-900 mb-2">Check Schedule</h3>
-            <p className="text-sm text-gray-600">View availability and manage your time</p>
+            <h3 className="font-semibold text-gray-900 mb-2">Verificar Horario</h3>
+            <p className="text-sm text-gray-600">Ve la disponibilidad y gestiona tu tiempo</p>
           </CardContent>
         </Card>
       </div>

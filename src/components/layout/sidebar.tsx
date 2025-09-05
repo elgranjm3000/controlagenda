@@ -18,14 +18,14 @@ import {
 } from 'lucide-react';
 
 const navigationItems = [
-  { name: 'Dashboard', href: '/dashboard', icon: Home, roles: ['owner', 'manager', 'staff', 'viewer'] },
-  { name: 'Appointments', href: '/appointments', icon: Calendar, roles: ['owner', 'manager', 'staff'] },
-  { name: 'Clients', href: '/clients', icon: Users, roles: ['owner', 'manager', 'staff'] },
-  { name: 'Services', href: '/services', icon: Briefcase, roles: ['owner', 'manager', 'staff'] },
-  { name: 'Payments', href: '/payments', icon: CreditCard, roles: ['owner', 'manager', 'staff'] },
-  { name: 'Reports', href: '/reports', icon: BarChart3, roles: ['owner', 'manager'] },
-  { name: 'Users', href: '/users', icon: UserCog, roles: ['owner', 'manager'] },
-  { name: 'Company', href: '/company', icon: Building2, roles: ['owner', 'manager'] },
+  { name: 'Panel Principal', href: '/dashboard', icon: Home, roles: ['owner', 'manager', 'staff', 'viewer'] },
+  { name: 'Citas', href: '/appointments', icon: Calendar, roles: ['owner', 'manager', 'staff'] },
+  { name: 'Clientes', href: '/clients', icon: Users, roles: ['owner', 'manager', 'staff'] },
+  { name: 'Servicios', href: '/services', icon: Briefcase, roles: ['owner', 'manager', 'staff'] },
+  { name: 'Pagos', href: '/payments', icon: CreditCard, roles: ['owner', 'manager', 'staff'] },
+  { name: 'Reportes', href: '/reports', icon: BarChart3, roles: ['owner', 'manager'] },
+  { name: 'Usuarios', href: '/users', icon: UserCog, roles: ['owner', 'manager'] },
+  { name: 'Empresa', href: '/company', icon: Building2, roles: ['owner', 'manager'] },
 ];
 
 export function Sidebar() {
@@ -50,7 +50,7 @@ export function Sidebar() {
         </div>
       </div>
 
-      {/* Navigation */}
+      {/* Navegación */}
       <nav className="flex-1 px-4 py-6 space-y-2">
         {filteredNavigation.map((item) => {
           const isActive = pathname === item.href || pathname.startsWith(item.href + '/');
@@ -75,7 +75,7 @@ export function Sidebar() {
         })}
       </nav>
 
-      {/* User Info & Logout */}
+      {/* Información del Usuario y Cerrar Sesión */}
       <div className="p-4 border-t border-gray-200">
         <div className="flex items-center space-x-3 mb-3">
           <div className="w-10 h-10 bg-gradient-to-r from-purple-500 to-blue-500 rounded-full flex items-center justify-center">
@@ -88,7 +88,9 @@ export function Sidebar() {
               {user?.name}
             </p>
             <p className="text-xs text-gray-500 capitalize">
-              {user?.role}
+              {user?.role === 'owner' ? 'Propietario' : 
+               user?.role === 'manager' ? 'Gerente' :
+               user?.role === 'staff' ? 'Personal' : 'Visualizador'}
             </p>
           </div>
         </div>
@@ -97,7 +99,7 @@ export function Sidebar() {
           className="flex items-center w-full px-4 py-2 text-sm text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
         >
           <LogOut className="mr-3 h-4 w-4" />
-          Sign Out
+          Cerrar Sesión
         </button>
       </div>
     </div>

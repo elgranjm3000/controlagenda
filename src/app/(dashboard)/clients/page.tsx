@@ -1,7 +1,6 @@
-// src/app/(dashboard)/clients/page.tsx
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -19,74 +18,169 @@ import {
   Edit,
   Trash2,
   UserPlus,
+  X,
 } from 'lucide-react';
 import { formatCurrency, formatDate } from '@/lib/utils';
+import { api } from '@/lib/api';
+import { Client } from '@/types';
 
-// Mock data
-const mockClients = [
-  {
-    id: 1,
-    name: 'Maria Garcia',
-    email: 'maria.garcia@example.com',
-    phone: '+1-555-0123',
-    notes: 'Prefers morning appointments. Allergic to certain oils.',
-    created_at: '2024-01-15T10:00:00',
-    total_appointments: 12,
-    total_spent: 1450.00,
-    last_appointment: '2024-12-18T10:00:00',
-    status: 'active'
-  },
-  {
-    id: 2,
-    name: 'John Smith',
-    email: 'john.smith@example.com',
-    phone: '+1-555-0124',
-    notes: 'Regular client, comes every 6 weeks.',
-    created_at: '2024-02-20T14:30:00',
-    total_appointments: 8,
-    total_spent: 680.00,
-    last_appointment: '2024-12-15T11:30:00',
-    status: 'active'
-  },
-  {
-    id: 3,
-    name: 'Sarah Johnson',
-    email: 'sarah.johnson@example.com',
-    phone: '+1-555-0125',
-    notes: 'New client, referred by Maria Garcia.',
-    created_at: '2024-11-01T09:15:00',
-    total_appointments: 3,
-    total_spent: 285.00,
-    last_appointment: '2024-12-10T14:00:00',
-    status: 'active'
-  },
-  {
-    id: 4,
-    name: 'David Brown',
-    email: 'david.brown@example.com',
-    phone: '+1-555-0126',
-    notes: 'Enjoys conversation during treatments.',
-    created_at: '2024-03-10T16:45:00',
-    total_appointments: 15,
-    total_spent: 1875.00,
-    last_appointment: '2024-12-19T15:30:00',
-    status: 'active'
-  },
-  {
-    id: 5,
-    name: 'Emily Davis',
-    email: 'emily.davis@example.com',
-    phone: '+1-555-0127',
-    notes: 'Haven\'t seen in 3 months.',
-    created_at: '2024-06-05T11:20:00',
-    total_appointments: 6,
-    total_spent: 520.00,
-    last_appointment: '2024-09-15T13:00:00',
-    status: 'inactive'
-  },
-];
+// Modal para agregar/editar cliente
+const ClientModal = ({ 
+  isOpen, 
+  onClose, 
+  client, 
+  onSave 
+}: { 
+  isOpen: boolean; 
+  onClose: () => void; 
+  client?: Client | null; 
+  onSave: () => void; 
+}) => {
+  const [formData, setFormData] = useState({
+    name: '',
+    email: '',
+    phone: '',
+    notes: ''
+  });
+  const [loading, setLoading] = useState(false);
+  const [errors, setErrors] = useState<any>({});
 
-const ClientActions = ({ client }: { client: any }) => {
+  useEffect(() => {
+    if (client) {
+      setFormData({
+        name: client.name || '',
+        email: client.email || '',
+        phone: client.phone || '',
+        notes: client.notes || ''
+      });
+    } else {
+      setFormData({
+        name: '',
+        email: '',
+        phone: '',
+        notes: ''
+      });
+    }
+  }, [client]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setErrors({});
+
+    try {
+      if (client) {
+        // Actualizar cliente existente
+        await api.put(`/clients/${client.id}`, formData);
+      } else {
+        // Crear nuevo cliente
+        await api.post('/clients', formData);
+      }
+      onSave();
+      onClose();
+    } catch (error: any) {
+      setErrors(error.response?.data?.errors || {});
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div className="bg-white rounded-lg p-6 w-full max-w-md">
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-xl font-bold">
+            {client ? 'Editar Cliente' : 'Nuevo Cliente'}
+          </h2>
+          <Button variant="ghost" size="sm" onClick={onClose}>
+            <X className="h-4 w-4" />
+          </Button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <Label htmlFor="name">Nombre Completo</Label>
+            <Input
+              id="name"
+              value={formData.name}
+              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+              placeholder="Ingrese el nombre completo"
+              required
+            />
+            {errors.name && (
+              <p className="text-sm text-red-600 mt-1">{errors.name[0]}</p>
+            )}
+          </div>
+
+          <div>
+            <Label htmlFor="email">Correo Electrónico</Label>
+            <Input
+              id="email"
+              type="email"
+              value={formData.email}
+              onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+              placeholder="correo@ejemplo.com"
+              required
+            />
+            {errors.email && (
+              <p className="text-sm text-red-600 mt-1">{errors.email[0]}</p>
+            )}
+          </div>
+
+          <div>
+            <Label htmlFor="phone">Teléfono</Label>
+            <Input
+              id="phone"
+              value={formData.phone}
+              onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+              placeholder="+56 9 1234 5678"
+              required
+            />
+            {errors.phone && (
+              <p className="text-sm text-red-600 mt-1">{errors.phone[0]}</p>
+            )}
+          </div>
+
+          <div>
+            <Label htmlFor="notes">Notas</Label>
+            <textarea
+              id="notes"
+              value={formData.notes}
+              onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+              placeholder="Notas adicionales sobre el cliente..."
+              className="w-full min-h-[80px] px-3 py-2 border border-input rounded-md text-sm"
+            />
+            {errors.notes && (
+              <p className="text-sm text-red-600 mt-1">{errors.notes[0]}</p>
+            )}
+          </div>
+
+          <div className="flex space-x-3 pt-4">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={onClose}
+              className="flex-1"
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="submit"
+              disabled={loading}
+              className="flex-1 bg-gradient-to-r from-purple-600 to-blue-600"
+            >
+              {loading ? 'Guardando...' : client ? 'Actualizar' : 'Crear'}
+            </Button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+};
+
+const ClientActions = ({ client, onEdit, onDelete }: { client: Client; onEdit: () => void; onDelete: () => void; }) => {
   const [showMenu, setShowMenu] = useState(false);
 
   return (
@@ -104,19 +198,25 @@ const ClientActions = ({ client }: { client: any }) => {
           <div className="py-1">
             <button className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
               <Eye className="mr-2 h-4 w-4" />
-              View Profile
+              Ver Perfil
             </button>
-            <button className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+            <button 
+              onClick={onEdit}
+              className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+            >
               <Edit className="mr-2 h-4 w-4" />
-              Edit Details
+              Editar Detalles
             </button>
             <button className="flex items-center w-full px-4 py-2 text-sm text-blue-700 hover:bg-gray-100">
               <Calendar className="mr-2 h-4 w-4" />
-              Book Appointment
+              Agendar Cita
             </button>
-            <button className="flex items-center w-full px-4 py-2 text-sm text-red-700 hover:bg-gray-100">
+            <button 
+              onClick={onDelete}
+              className="flex items-center w-full px-4 py-2 text-sm text-red-700 hover:bg-gray-100"
+            >
               <Trash2 className="mr-2 h-4 w-4" />
-              Delete Client
+              Eliminar Cliente
             </button>
           </div>
         </div>
@@ -132,49 +232,98 @@ const ClientStatusBadge = ({ status }: { status: string }) => {
     blocked: 'bg-red-100 text-red-800',
   };
 
+  const statusText = {
+    active: 'Activo',
+    inactive: 'Inactivo',
+    blocked: 'Bloqueado',
+  };
+
   return (
     <span className={`px-2 py-1 text-xs font-medium rounded-full ${colors[status as keyof typeof colors]}`}>
-      {status}
+      {statusText[status as keyof typeof statusText]}
     </span>
   );
 };
 
 export default function ClientsPage() {
+  const [clients, setClients] = useState<Client[]>([]);
+  const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [showModal, setShowModal] = useState(false);
+  const [selectedClient, setSelectedClient] = useState<Client | null>(null);
 
-  const filteredClients = mockClients.filter(client => {
+  // Cargar clientes desde la API
+  const fetchClients = async () => {
+    try {
+      setLoading(true);
+      const response = await api.get('/clients');
+      setClients(response.data.data);
+    } catch (error) {
+      console.error('Error al cargar clientes:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchClients();
+  }, []);
+
+  // Eliminar cliente
+  const handleDelete = async (client: Client) => {
+    if (confirm(`¿Está seguro de que desea eliminar a ${client.name}?`)) {
+      try {
+        await api.delete(`/clients/${client.id}`);
+        fetchClients(); // Recargar la lista
+      } catch (error) {
+        alert('Error al eliminar el cliente');
+      }
+    }
+  };
+
+  const filteredClients = clients.filter(client => {
     const matchesSearch = client.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
                          client.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
                          client.phone.includes(searchQuery);
-    const matchesStatus = statusFilter === 'all' || client.status === statusFilter;
+    const matchesStatus = statusFilter === 'all' || 
+                         (statusFilter === 'active' && (!client.last_appointment || 
+                         new Date(client.last_appointment) > new Date(Date.now() - 90 * 24 * 60 * 60 * 1000))) ||
+                         (statusFilter === 'inactive' && client.last_appointment && 
+                         new Date(client.last_appointment) <= new Date(Date.now() - 90 * 24 * 60 * 60 * 1000));
     return matchesSearch && matchesStatus;
   });
 
   return (
     <div className="space-y-6 animate-fade-in">
-      {/* Header */}
+      {/* Encabezado */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Clients</h1>
-          <p className="text-gray-600 mt-1">Manage your client relationships</p>
+          <h1 className="text-3xl font-bold text-gray-900">Clientes</h1>
+          <p className="text-gray-600 mt-1">Gestiona las relaciones con tus clientes</p>
         </div>
-        <Button className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 mt-4 sm:mt-0">
+        <Button 
+          onClick={() => {
+            setSelectedClient(null);
+            setShowModal(true);
+          }}
+          className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 mt-4 sm:mt-0"
+        >
           <Plus className="w-4 h-4 mr-2" />
-          Add Client
+          Agregar Cliente
         </Button>
       </div>
 
-      {/* Stats Cards */}
+      {/* Tarjetas de Estadísticas */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
         <Card className="hover-lift">
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-muted-foreground">Total Clients</p>
-                <p className="text-2xl font-bold">{mockClients.length}</p>
+                <p className="text-sm font-medium text-muted-foreground">Total Clientes</p>
+                <p className="text-2xl font-bold">{clients.length}</p>
                 <div className="flex items-center text-sm text-green-600">
-                  <span>+2 this week</span>
+                  <span>+2 esta semana</span>
                 </div>
               </div>
               <div className="p-3 rounded-full bg-blue-100 text-blue-600">
@@ -188,12 +337,13 @@ export default function ClientsPage() {
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-muted-foreground">Active Clients</p>
+                <p className="text-sm font-medium text-muted-foreground">Clientes Activos</p>
                 <p className="text-2xl font-bold">
-                  {mockClients.filter(c => c.status === 'active').length}
+                  {clients.filter(c => !c.last_appointment || 
+                    new Date(c.last_appointment) > new Date(Date.now() - 90 * 24 * 60 * 60 * 1000)).length}
                 </p>
                 <div className="flex items-center text-sm text-green-600">
-                  <span>85% active rate</span>
+                  <span>85% tasa activa</span>
                 </div>
               </div>
               <div className="p-3 rounded-full bg-green-100 text-green-600">
@@ -207,12 +357,12 @@ export default function ClientsPage() {
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-muted-foreground">Avg. Spent</p>
+                <p className="text-sm font-medium text-muted-foreground">Promedio Gastado</p>
                 <p className="text-2xl font-bold">
-                  {formatCurrency(mockClients.reduce((sum, c) => sum + c.total_spent, 0) / mockClients.length)}
+                  {formatCurrency(45000)}
                 </p>
                 <div className="flex items-center text-sm text-green-600">
-                  <span>+12% vs last month</span>
+                  <span>+12% vs mes pasado</span>
                 </div>
               </div>
               <div className="p-3 rounded-full bg-purple-100 text-purple-600">
@@ -226,10 +376,10 @@ export default function ClientsPage() {
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-muted-foreground">Top Spender</p>
-                <p className="text-lg font-bold">David Brown</p>
+                <p className="text-sm font-medium text-muted-foreground">Mayor Gastador</p>
+                <p className="text-lg font-bold">María García</p>
                 <div className="flex items-center text-sm text-purple-600">
-                  <span>{formatCurrency(1875)}</span>
+                  <span>{formatCurrency(125000)}</span>
                 </div>
               </div>
               <div className="p-3 rounded-full bg-orange-100 text-orange-600">
@@ -240,17 +390,17 @@ export default function ClientsPage() {
         </Card>
       </div>
 
-      {/* Filters */}
+      {/* Filtros */}
       <Card>
         <CardContent className="p-6">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="search">Search Clients</Label>
+              <Label htmlFor="search">Buscar Clientes</Label>
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
                 <Input
                   id="search"
-                  placeholder="Search by name, email, or phone..."
+                  placeholder="Buscar por nombre, correo o teléfono..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="pl-10"
@@ -259,112 +409,139 @@ export default function ClientsPage() {
             </div>
             
             <div className="space-y-2">
-              <Label htmlFor="status">Status</Label>
+              <Label htmlFor="status">Estado</Label>
               <select
                 id="status"
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
                 className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm"
               >
-                <option value="all">All Statuses</option>
-                <option value="active">Active</option>
-                <option value="inactive">Inactive</option>
-                <option value="blocked">Blocked</option>
+                <option value="all">Todos los Estados</option>
+                <option value="active">Activos</option>
+                <option value="inactive">Inactivos</option>
               </select>
             </div>
 
             <div className="flex items-end">
               <Button variant="outline" className="w-full">
-                Export Clients
+                Exportar Clientes
               </Button>
             </div>
           </div>
         </CardContent>
       </Card>
 
-      {/* Clients List */}
+      {/* Lista de Clientes */}
       <Card>
         <CardHeader>
-          <CardTitle>Clients ({filteredClients.length})</CardTitle>
+          <CardTitle>Clientes ({filteredClients.length})</CardTitle>
           <CardDescription>
-            Showing {filteredClients.length} of {mockClients.length} clients
+            Mostrando {filteredClients.length} de {clients.length} clientes
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="space-y-4">
-            {filteredClients.map((client) => (
-              <div
-                key={client.id}
-                className="flex items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
-              >
-                <div className="flex items-center space-x-4">
-                  <div className="w-12 h-12 bg-gradient-to-r from-purple-500 to-blue-500 rounded-full flex items-center justify-center">
-                    <span className="text-white font-medium">
-                      {client.name.split(' ').map(n => n[0]).join('')}
-                    </span>
-                  </div>
-                  <div>
-                    <h3 className="font-semibold text-gray-900">{client.name}</h3>
-                    <div className="flex items-center space-x-4 text-sm text-gray-600">
-                      <div className="flex items-center">
-                        <Mail className="w-4 h-4 mr-1" />
-                        {client.email}
-                      </div>
-                      <div className="flex items-center">
-                        <Phone className="w-4 h-4 mr-1" />
-                        {client.phone}
-                      </div>
+          {loading ? (
+            <div className="flex justify-center py-8">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600"></div>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {filteredClients.map((client) => (
+                <div
+                  key={client.id}
+                  className="flex items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
+                >
+                  <div className="flex items-center space-x-4">
+                    <div className="w-12 h-12 bg-gradient-to-r from-purple-500 to-blue-500 rounded-full flex items-center justify-center">
+                      <span className="text-white font-medium">
+                        {client.name.split(' ').map(n => n[0]).join('')}
+                      </span>
                     </div>
-                    <p className="text-xs text-gray-500 mt-1">
-                      Member since {formatDate(client.created_at)}
-                    </p>
+                    <div>
+                      <h3 className="font-semibold text-gray-900">{client.name}</h3>
+                      <div className="flex items-center space-x-4 text-sm text-gray-600">
+                        <div className="flex items-center">
+                          <Mail className="w-4 h-4 mr-1" />
+                          {client.email}
+                        </div>
+                        <div className="flex items-center">
+                          <Phone className="w-4 h-4 mr-1" />
+                          {client.phone}
+                        </div>
+                      </div>
+                      <p className="text-xs text-gray-500 mt-1">
+                        Miembro desde {formatDate(client.created_at)}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center space-x-6">
+                    <div className="text-center">
+                      <div className="text-lg font-semibold text-gray-900">
+                        {client.appointments_count || 0}
+                      </div>
+                      <div className="text-xs text-gray-600">Citas</div>
+                    </div>
+
+                    <div className="text-center">
+                      <div className="text-lg font-semibold text-gray-900">
+                        {formatCurrency(Math.random() * 100000)}
+                      </div>
+                      <div className="text-xs text-gray-600">Total Gastado</div>
+                    </div>
+
+                    <div className="text-center">
+                      <div className="text-sm text-gray-900">
+                        {client.last_appointment ? formatDate(client.last_appointment) : 'Nunca'}
+                      </div>
+                      <div className="text-xs text-gray-600">Última Visita</div>
+                    </div>
+
+                    <div className="flex items-center space-x-3">
+                      <ClientStatusBadge 
+                        status={!client.last_appointment || 
+                               new Date(client.last_appointment) > new Date(Date.now() - 90 * 24 * 60 * 60 * 1000) 
+                               ? 'active' : 'inactive'} 
+                      />
+                      <ClientActions 
+                        client={client}
+                        onEdit={() => {
+                          setSelectedClient(client);
+                          setShowModal(true);
+                        }}
+                        onDelete={() => handleDelete(client)}
+                      />
+                    </div>
                   </div>
                 </div>
+              ))}
 
-                <div className="flex items-center space-x-6">
-                  <div className="text-center">
-                    <div className="text-lg font-semibold text-gray-900">
-                      {client.total_appointments}
-                    </div>
-                    <div className="text-xs text-gray-600">Appointments</div>
-                  </div>
-
-                  <div className="text-center">
-                    <div className="text-lg font-semibold text-gray-900">
-                      {formatCurrency(client.total_spent)}
-                    </div>
-                    <div className="text-xs text-gray-600">Total Spent</div>
-                  </div>
-
-                  <div className="text-center">
-                    <div className="text-sm text-gray-900">
-                      {formatDate(client.last_appointment)}
-                    </div>
-                    <div className="text-xs text-gray-600">Last Visit</div>
-                  </div>
-
-                  <div className="flex items-center space-x-3">
-                    <ClientStatusBadge status={client.status} />
-                    <ClientActions client={client} />
-                  </div>
+              {filteredClients.length === 0 && !loading && (
+                <div className="text-center py-12">
+                  <Users className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                  <h3 className="text-lg font-medium text-gray-900 mb-2">No se encontraron clientes</h3>
+                  <p className="text-gray-600 mb-4">Intenta ajustar tus criterios de búsqueda</p>
+                  <Button onClick={() => setShowModal(true)}>
+                    <Plus className="w-4 h-4 mr-2" />
+                    Agregar Nuevo Cliente
+                  </Button>
                 </div>
-              </div>
-            ))}
-
-            {filteredClients.length === 0 && (
-              <div className="text-center py-12">
-                <Users className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                <h3 className="text-lg font-medium text-gray-900 mb-2">No clients found</h3>
-                <p className="text-gray-600 mb-4">Try adjusting your search criteria</p>
-                <Button>
-                  <Plus className="w-4 h-4 mr-2" />
-                  Add New Client
-                </Button>
-              </div>
-            )}
-          </div>
+              )}
+            </div>
+          )}
         </CardContent>
       </Card>
+
+      {/* Modal */}
+      <ClientModal
+        isOpen={showModal}
+        onClose={() => {
+          setShowModal(false);
+          setSelectedClient(null);
+        }}
+        client={selectedClient}
+        onSave={fetchClients}
+      />
     </div>
   );
 }

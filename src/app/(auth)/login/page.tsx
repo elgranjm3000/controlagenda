@@ -24,68 +24,68 @@ export default function LoginPage() {
     if (result.success) {
       router.push('/dashboard');
     } else {
-      setError(result.error || 'Login failed');
+      setError(result.error || 'Error en el inicio de sesión');
     }
   };
 
   const demoAccounts = [
-    { role: 'Owner', email: 'owner@beauty-salon-demo.com', password: 'password' },
-    { role: 'Manager', email: 'manager@beauty-salon-demo.com', password: 'password' },
+    { role: 'Propietario', email: 'owner@beauty-salon-demo.com', password: 'password' },
+    { role: 'Gerente', email: 'manager@beauty-salon-demo.com', password: 'password' },
   ];
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-50 via-white to-blue-50 flex items-center justify-center p-4">
       <div className="w-full max-w-6xl grid lg:grid-cols-2 gap-8 items-center">
-        {/* Left Side - Hero Section */}
+        {/* Lado Izquierdo - Sección Hero */}
         <div className="hidden lg:block space-y-8">
           <div className="space-y-4">
             <h1 className="text-5xl font-bold bg-gradient-to-r from-purple-600 to-blue-600 bg-clip-text text-transparent">
               AgendaChile
             </h1>
             <p className="text-xl text-gray-600 leading-relaxed">
-              Professional appointment management platform designed for modern businesses.
+              Plataforma profesional de gestión de citas diseñada para empresas modernas.
             </p>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div className="bg-white/60 backdrop-blur-sm rounded-xl p-4 hover-lift">
               <Calendar className="w-8 h-8 text-purple-600 mb-2" />
-              <h3 className="font-semibold text-gray-800">Smart Scheduling</h3>
-              <p className="text-sm text-gray-600">Intelligent appointment booking with availability optimization</p>
+              <h3 className="font-semibold text-gray-800">Programación Inteligente</h3>
+              <p className="text-sm text-gray-600">Reserva inteligente de citas con optimización de disponibilidad</p>
             </div>
             <div className="bg-white/60 backdrop-blur-sm rounded-xl p-4 hover-lift">
               <Users className="w-8 h-8 text-blue-600 mb-2" />
-              <h3 className="font-semibold text-gray-800">Client Management</h3>
-              <p className="text-sm text-gray-600">Comprehensive client profiles and history tracking</p>
+              <h3 className="font-semibold text-gray-800">Gestión de Clientes</h3>
+              <p className="text-sm text-gray-600">Perfiles completos de clientes y seguimiento de historial</p>
             </div>
             <div className="bg-white/60 backdrop-blur-sm rounded-xl p-4 hover-lift">
               <TrendingUp className="w-8 h-8 text-green-600 mb-2" />
-              <h3 className="font-semibold text-gray-800">Analytics</h3>
-              <p className="text-sm text-gray-600">Detailed reports and business insights</p>
+              <h3 className="font-semibold text-gray-800">Analíticas</h3>
+              <p className="text-sm text-gray-600">Reportes detallados e insights de negocio</p>
             </div>
             <div className="bg-white/60 backdrop-blur-sm rounded-xl p-4 hover-lift">
               <Sparkles className="w-8 h-8 text-pink-600 mb-2" />
-              <h3 className="font-semibold text-gray-800">Premium Experience</h3>
-              <p className="text-sm text-gray-600">Elegant interface designed for efficiency</p>
+              <h3 className="font-semibold text-gray-800">Experiencia Premium</h3>
+              <p className="text-sm text-gray-600">Interfaz elegante diseñada para la eficiencia</p>
             </div>
           </div>
         </div>
 
-        {/* Right Side - Login Form */}
+        {/* Lado Derecho - Formulario de Login */}
         <div className="w-full max-w-md mx-auto space-y-6">
           <Card className="hover-lift bg-white/80 backdrop-blur-sm border-0 shadow-xl">
             <CardHeader className="text-center space-y-2">
-              <CardTitle className="text-2xl font-bold">Welcome Back</CardTitle>
-              <CardDescription>Sign in to your AgendaPro account</CardDescription>
+              <CardTitle className="text-2xl font-bold">Bienvenido</CardTitle>
+              <CardDescription>Inicia sesión en tu cuenta de AgendaChile</CardDescription>
             </CardHeader>
             <CardContent>
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="email">Email</Label>
+                  <Label htmlFor="email">Correo Electrónico</Label>
                   <Input
                     id="email"
                     type="email"
-                    placeholder="Enter your email"
+                    placeholder="Ingresa tu correo electrónico"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     required
@@ -93,11 +93,11 @@ export default function LoginPage() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="password">Password</Label>
+                  <Label htmlFor="password">Contraseña</Label>
                   <Input
                     id="password"
                     type="password"
-                    placeholder="Enter your password"
+                    placeholder="Ingresa tu contraseña"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     required
@@ -114,17 +114,17 @@ export default function LoginPage() {
                   className="w-full bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 transition-all duration-300"
                   disabled={isLoading}
                 >
-                  {isLoading ? 'Signing in...' : 'Sign In'}
+                  {isLoading ? 'Iniciando sesión...' : 'Iniciar Sesión'}
                 </Button>
               </form>
             </CardContent>
           </Card>
 
-          {/* Demo Accounts */}
+          {/* Cuentas Demo */}
           <Card className="bg-gray-50/80 backdrop-blur-sm border-0">
             <CardHeader>
-              <CardTitle className="text-lg">Demo Accounts</CardTitle>
-              <CardDescription>Try AgendaPro with these demo credentials</CardDescription>
+              <CardTitle className="text-lg">Cuentas de Demostración</CardTitle>
+              <CardDescription>Prueba AgendaChile con estas credenciales de demo</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
               {demoAccounts.map((account) => (
@@ -140,7 +140,7 @@ export default function LoginPage() {
                     <div className="font-medium">{account.role}</div>
                     <div className="text-sm text-gray-600">{account.email}</div>
                   </div>
-                  <Button variant="ghost" size="sm">Use</Button>
+                  <Button variant="ghost" size="sm">Usar</Button>
                 </div>
               ))}
             </CardContent>
