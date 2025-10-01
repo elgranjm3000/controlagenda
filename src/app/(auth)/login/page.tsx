@@ -121,30 +121,7 @@ export default function LoginPage() {
           </Card>
 
           {/* Cuentas Demo */}
-          <Card className="bg-gray-50/80 backdrop-blur-sm border-0">
-            <CardHeader>
-              <CardTitle className="text-lg">Cuentas de Demostración</CardTitle>
-              <CardDescription>Prueba AgendaChile con estas credenciales de demo</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {demoAccounts.map((account) => (
-                <div 
-                  key={account.email}
-                  className="flex items-center justify-between p-3 bg-white/60 rounded-lg cursor-pointer hover:bg-white/80 transition-colors"
-                  onClick={() => {
-                    setEmail(account.email);
-                    setPassword(account.password);
-                  }}
-                >
-                  <div>
-                    <div className="font-medium">{account.role}</div>
-                    <div className="text-sm text-gray-600">{account.email}</div>
-                  </div>
-                  <Button variant="ghost" size="sm">Usar</Button>
-                </div>
-              ))}
-            </CardContent>
-          </Card>
+          
         </div>
       </div>
     </div>

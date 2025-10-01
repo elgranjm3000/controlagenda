@@ -53,14 +53,13 @@ const AppointmentModal = ({
     // Cargar datos necesarios para el formulario
     const loadFormData = async () => {
       try {
-        const [clientsRes, servicesRes, usersRes] = await Promise.all([
+        const [clientsRes, servicesRes] = await Promise.all([
           api.get('/clients'),
           api.get('/services'),
-          api.get('/users')
         ]);
+        console.log("clientes: ",clientsRes.data.data);
         setClients(clientsRes.data.data);
         setServices(servicesRes.data.data);
-        setUsers(usersRes.data.data);
       } catch (error) {
         console.error('Error cargando datos del formulario:', error);
       }

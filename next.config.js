@@ -1,17 +1,20 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  output: 'export',
+  trailingSlash: true,
   experimental: {
-    appDir: true,
-  },
-  typescript: {
-    ignoreBuildErrors: true,
-  },
+    appDir: false,
+  },  
   images: {
-    domains: ['localhost'],
+    //domains: ['localhost'],
+     unoptimized: true
   },
-  env: {
-    NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1',
+   typescript: {
+    ignoreBuildErrors: true, // ← Ignora errores de TypeScript en build
   },
+  //env: {
+   // NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1',
+ // },
 }
 
 module.exports = nextConfig
