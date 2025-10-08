@@ -17,6 +17,54 @@ import {
 } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell } from 'recharts';
 
+// Tipos del API
+interface DashboardData {
+  period: string;
+  executive_id: string | number;
+  kpi_1: {
+    title: string;
+    maskAmount: string;
+    footer: string;
+    amount: number;
+    title_color: string;
+  } | null;
+  kpi_2: {
+    title: string;
+    maskAmount: string;
+    footer: string;
+    amount: number;
+    title_color: string;
+  } | null;
+  kpi_3: {
+    title: string;
+    maskAmount: string;
+    footer: string;
+    amount: number;
+    title_color: string;
+  } | null;
+  kpi_4: {
+    title: string;
+    maskAmount: string;
+    footer: string;
+    amount: number;
+    title_color: string;
+  } | null;
+  chart_dual: {
+    title: string;
+    footer: string;
+    y1: number[] | null;
+    y2: number[] | null;
+    x1: (string | number)[] | null;
+    x2: (string | number)[] | null;
+  } | null;
+  chart_single: {
+    title: string;
+    footer: string;
+    y1: number[] | null;
+    x1: (string | number)[] | null;
+  } | null;
+}
+
 // Datos de ejemplo - Reemplazar con llamadas reales a la API
 const mockData = {
   stats: {
@@ -94,11 +142,41 @@ const AppointmentStatusBadge = ({ status }: { status: string }) => {
 export default function DashboardPage() {
   const { user } = useAuth();
   const [currentTime, setCurrentTime] = useState(new Date());
+  const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
     return () => clearInterval(timer);
   }, []);
+
+  // Cargar datos del dashboard desde el API
+  useEffect(() => {
+    fetchDashboardData();
+  }, []);
+
+  const fetchDashboardData = async () => {
+    try {
+      const token = localStorage.getItem('auth_token');
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
+      
+      const response = await fetch(`${API_URL}/dashboard`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        if (result.success) {
+          setDashboardData(result.data);
+          console.log('Dashboard data:', result.data);
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching dashboard:', error);
+    }
+  };
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('es-CL', {
@@ -106,6 +184,42 @@ export default function DashboardPage() {
       currency: 'CLP',
     }).format(amount);
   };
+
+  // Preparar datos para el gráfico dual (si existen)
+  const prepareDualChartData = () => {
+    if (!dashboardData?.chart_dual?.y1 || !dashboardData?.chart_dual?.x1) {
+      return mockData.salesData;
+    }
+
+    const { y1, y2, x1 } = dashboardData.chart_dual;
+    
+    return x1.map((label, index) => ({
+      date: label,
+      revenue: y1[index] || 0,
+      appointments: y2 ? (y2[index] || 0) : 0,
+    }));
+  };
+
+
+const preparePieChartData = () => {
+  if (!dashboardData?.chart_single?.y1 || !dashboardData?.chart_single?.x1) {
+    return mockData.serviceDistribution; // Fallback a mock
+  }
+
+  const { y1, x1 } = dashboardData.chart_single;
+  
+  return x1.map((label, index) => ({
+    name: String(label),        // ← Nombre del servicio
+    value: y1[index] || 0,      // ← Valor/porcentaje
+    color: colors[index % 8],   // ← Color auto-asignado
+  }));
+};
+
+const colors = ['#8B5CF6', '#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#6366F1', '#14B8A6', '#F97316'];
+const pieData = preparePieChartData();
+ 
+
+  const salesData = prepareDualChartData();
 
   return (
     <div className="space-y-8 animate-fade-in">
@@ -123,6 +237,11 @@ export default function DashboardPage() {
               day: 'numeric' 
             })}
           </p>
+          {dashboardData && (
+            <p className="text-xs text-gray-500 mt-1">
+              Período: {dashboardData.period}
+            </p>
+          )}
         </div>
         <div className="flex space-x-4 mt-4 sm:mt-0">
           <Button className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700">
@@ -132,33 +251,33 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Tarjetas de Estadísticas */}
+      {/* Tarjetas de Estadísticas - Usar datos del API si existen */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
         <StatCard
-          title="Citas de Hoy"
-          value={mockData.stats.todayAppointments}
-          change="+2 desde ayer"
+          title={dashboardData?.kpi_1?.title || "Citas de Hoy"}
+          value={dashboardData?.kpi_1?.maskAmount || mockData.stats.todayAppointments}
+          change={dashboardData?.kpi_1?.footer || "+2 desde ayer"}
           trend="up"
           icon={Calendar}
         />
         <StatCard
-          title="Ingresos de Hoy"
-          value={formatCurrency(mockData.stats.todayRevenue)}
-          change="+12% desde ayer"
+          title={dashboardData?.kpi_2?.title || "Ingresos de Hoy"}
+          value={dashboardData?.kpi_2?.maskAmount || formatCurrency(mockData.stats.todayRevenue)}
+          change={dashboardData?.kpi_2?.footer || "+12% desde ayer"}
           trend="up"
           icon={DollarSign}
         />
         <StatCard
-          title="Nuevos Clientes Esta Semana"
-          value={mockData.stats.newClientsThisWeek}
-          change="+3 desde la semana pasada"
+          title={dashboardData?.kpi_3?.title || "Nuevos Clientes Esta Semana"}
+          value={dashboardData?.kpi_3?.maskAmount || mockData.stats.newClientsThisWeek}
+          change={dashboardData?.kpi_3?.footer || "+3 desde la semana pasada"}
           trend="up"
           icon={Users}
         />
         <StatCard
-          title="Tasa de Ocupación"
-          value={`${mockData.stats.occupancyRate}%`}
-          change="-5% desde la semana pasada"
+          title={dashboardData?.kpi_4?.title || "Tasa de Ocupación"}
+          value={dashboardData?.kpi_4?.maskAmount || `${mockData.stats.occupancyRate}%`}
+          change={dashboardData?.kpi_4?.footer || "-5% desde la semana pasada"}
           trend="down"
           icon={TrendingUp}
         />
@@ -166,16 +285,20 @@ export default function DashboardPage() {
 
       {/* Fila de Gráficos */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Gráfico de Ingresos */}
+        {/* Gráfico de Ingresos - Usar datos del API si existen */}
         <Card className="hover-lift">
           <CardHeader>
-            <CardTitle>Ingresos Semanales</CardTitle>
-            <CardDescription>Ingresos y citas de los últimos 7 días</CardDescription>
+            <CardTitle>
+              {dashboardData?.chart_dual?.title || "Ingresos Semanales"}
+            </CardTitle>
+            <CardDescription>
+              {dashboardData?.chart_dual?.footer || "Ingresos y citas de los últimos 7 días"}
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <div className="h-80">
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={mockData.salesData}>
+                <LineChart data={salesData}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="date" />
                   <YAxis />
@@ -216,7 +339,7 @@ export default function DashboardPage() {
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie
-                    data={mockData.serviceDistribution}
+                    data={pieData}
                     cx="50%"
                     cy="50%"
                     outerRadius={100}
@@ -227,7 +350,7 @@ export default function DashboardPage() {
                       <Cell key={`cell-${index}`} fill={entry.color} />
                     ))}
                   </Pie>
-                  <Tooltip formatter={(value) => [`${value}%`, 'Porcentaje']} />
+                  <Tooltip formatter={(value, name, props) => [`${value}%`, props.payload.name]} />
                 </PieChart>
               </ResponsiveContainer>
             </div>
@@ -236,78 +359,9 @@ export default function DashboardPage() {
       </div>
 
       {/* Citas Recientes */}
-      <Card className="hover-lift">
-        <CardHeader className="flex flex-row items-center justify-between">
-          <div>
-            <CardTitle>Citas de Hoy</CardTitle>
-            <CardDescription>Próximas citas y en curso</CardDescription>
-          </div>
-          <Button variant="outline" size="sm">
-            Ver Todas
-          </Button>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            {mockData.recentAppointments.map((appointment) => (
-              <div key={appointment.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
-                <div className="flex items-center space-x-4">
-                  <div className="w-10 h-10 bg-gradient-to-r from-purple-500 to-blue-500 rounded-full flex items-center justify-center">
-                    <span className="text-white font-medium text-sm">
-                      {appointment.client.split(' ').map(n => n[0]).join('')}
-                    </span>
-                  </div>
-                  <div>
-                    <p className="font-medium text-gray-900">{appointment.client}</p>
-                    <p className="text-sm text-gray-600">{appointment.service}</p>
-                  </div>
-                </div>
-                <div className="flex items-center space-x-4">
-                  <div className="text-right">
-                    <p className="font-medium text-gray-900">{appointment.time}</p>
-                    <AppointmentStatusBadge status={appointment.status} />
-                  </div>
-                  <Button variant="ghost" size="sm">
-                    Ver
-                  </Button>
-                </div>
-              </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
-
+    
       {/* Acciones Rápidas */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <Card className="hover-lift cursor-pointer group">
-          <CardContent className="p-6 text-center">
-            <div className="w-12 h-12 bg-purple-100 rounded-full flex items-center justify-center mx-auto mb-4 group-hover:bg-purple-200 transition-colors">
-              <CalendarCheck className="w-6 h-6 text-purple-600" />
-            </div>
-            <h3 className="font-semibold text-gray-900 mb-2">Agendar Cita</h3>
-            <p className="text-sm text-gray-600">Programa una nueva cita para tus clientes</p>
-          </CardContent>
-        </Card>
-
-        <Card className="hover-lift cursor-pointer group">
-          <CardContent className="p-6 text-center">
-            <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4 group-hover:bg-blue-200 transition-colors">
-              <UserPlus className="w-6 h-6 text-blue-600" />
-            </div>
-            <h3 className="font-semibold text-gray-900 mb-2">Agregar Cliente</h3>
-            <p className="text-sm text-gray-600">Registra un nuevo cliente en tu sistema</p>
-          </CardContent>
-        </Card>
-
-        <Card className="hover-lift cursor-pointer group">
-          <CardContent className="p-6 text-center">
-            <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4 group-hover:bg-green-200 transition-colors">
-              <Clock className="w-6 h-6 text-green-600" />
-            </div>
-            <h3 className="font-semibold text-gray-900 mb-2">Verificar Horario</h3>
-            <p className="text-sm text-gray-600">Ve la disponibilidad y gestiona tu tiempo</p>
-          </CardContent>
-        </Card>
-      </div>
+   
     </div>
   );
 }

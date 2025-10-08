@@ -293,7 +293,7 @@ class JobSystemAPI {
       '/job-status/client',
       { params }
     );
-    return response.data.data;
+    return response.data;
   }
 
   async getContactStatuses(params?: any) {
@@ -307,8 +307,8 @@ class JobSystemAPI {
   async getAllStatuses() {
     const response = await this.client.get<ApiResponse>(
       '/job-status/all'
-    );
-    return response.data.data;
+    );    
+    return response.data;
   }
 
   async createClientStatus(data: { descrip: string; is_life: boolean }) {

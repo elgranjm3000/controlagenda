@@ -23,11 +23,12 @@ import {
 
 const navigationItems = [
   { name: 'Panel Principal', href: '/dashboard', icon: Home, roles: ['owner', 'manager', 'staff', 'viewer'] },
-  { name: 'Citas', href: '/appointments', icon: Calendar, roles: ['owner', 'manager', 'staff'] },
-  { name: 'Clientes', href: '/clients', icon: Users, roles: ['owner', 'manager', 'staff'] },
-  { name: 'Servicios', href: '/services', icon: Briefcase, roles: ['owner', 'manager', 'staff'] },
-  { name: 'Pagos', href: '/payments', icon: CreditCard, roles: ['owner', 'manager', 'staff'] },
-  { name: 'Reportes', href: '/reports', icon: BarChart3, roles: ['owner', 'manager'] },
+  //{ name: 'Citas', href: '/appointments', icon: Calendar, roles: ['owner', 'manager', 'staff'] },
+  //{ name: 'Clientes', href: '/clients', icon: Users, roles: ['owner', 'manager', 'staff'] },
+  { name: 'Clientes', href: '/job-executives', icon: Users, roles: ['owner', 'manager', 'staff'] },
+  //{ name: 'Servicios', href: '/services', icon: Briefcase, roles: ['owner', 'manager', 'staff'] },
+  //{ name: 'Pagos', href: '/payments', icon: CreditCard, roles: ['owner', 'manager', 'staff'] },
+  //{ name: 'Reportes', href: '/reports', icon: BarChart3, roles: ['owner', 'manager'] },
   //{ name: 'Usuarios', href: '/users', icon: UserCog, roles: ['owner', 'manager'] },
   //{ name: 'Empresa', href: '/company', icon: Building2, roles: ['owner', 'manager'] },
 ];
