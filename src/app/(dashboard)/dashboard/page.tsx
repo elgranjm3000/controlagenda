@@ -1,5 +1,5 @@
 'use client';
-
+//13071788
 import { useEffect, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -188,7 +188,7 @@ export default function DashboardPage() {
   // Preparar datos para el gráfico dual (si existen)
   const prepareDualChartData = () => {
     if (!dashboardData?.chart_dual?.y1 || !dashboardData?.chart_dual?.x1) {
-      return mockData.salesData;
+      return [];
     }
 
     const { y1, y2, x1 } = dashboardData.chart_dual;
@@ -203,7 +203,7 @@ export default function DashboardPage() {
 
 const preparePieChartData = () => {
   if (!dashboardData?.chart_single?.y1 || !dashboardData?.chart_single?.x1) {
-    return mockData.serviceDistribution; // Fallback a mock
+    return []; // Fallback a mock
   }
 
   const { y1, x1 } = dashboardData.chart_single;
@@ -255,28 +255,28 @@ const pieData = preparePieChartData();
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
         <StatCard
           title={dashboardData?.kpi_1?.title || "Citas de Hoy"}
-          value={dashboardData?.kpi_1?.maskAmount || mockData.stats.todayAppointments}
+          value={dashboardData?.kpi_1?.maskAmount || 0}
           change={dashboardData?.kpi_1?.footer || "+2 desde ayer"}
           trend="up"
           icon={Calendar}
         />
         <StatCard
           title={dashboardData?.kpi_2?.title || "Ingresos de Hoy"}
-          value={dashboardData?.kpi_2?.maskAmount || formatCurrency(mockData.stats.todayRevenue)}
+          value={dashboardData?.kpi_2?.maskAmount || formatCurrency(0)}
           change={dashboardData?.kpi_2?.footer || "+12% desde ayer"}
           trend="up"
           icon={DollarSign}
         />
         <StatCard
           title={dashboardData?.kpi_3?.title || "Nuevos Clientes Esta Semana"}
-          value={dashboardData?.kpi_3?.maskAmount || mockData.stats.newClientsThisWeek}
+          value={dashboardData?.kpi_3?.maskAmount || 0}
           change={dashboardData?.kpi_3?.footer || "+3 desde la semana pasada"}
           trend="up"
           icon={Users}
         />
         <StatCard
           title={dashboardData?.kpi_4?.title || "Tasa de Ocupación"}
-          value={dashboardData?.kpi_4?.maskAmount || `${mockData.stats.occupancyRate}%`}
+          value={dashboardData?.kpi_4?.maskAmount || `0%`}
           change={dashboardData?.kpi_4?.footer || "-5% desde la semana pasada"}
           trend="down"
           icon={TrendingUp}

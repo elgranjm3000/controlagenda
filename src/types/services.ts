@@ -16,6 +16,7 @@ import {
   CreateJobContactRequest,
   JobOfferQueryParams,
   JobExecutiveQueryParams,
+  summaryQueryParams,
 } from './api';
 
 // ==================== API CLIENT ====================
@@ -77,6 +78,11 @@ class JobSystemAPI {
   async getCurrentUser() {
     const response = await this.client.get<ApiResponse>('/auth/me');
     return response.data.data;
+  }
+
+  async getSummary() {
+    const response = await this.client.get<summaryQueryParams>('/dashboard/summary');
+    return response.data;
   }
 
   // ==================== JOB OFFERS ====================
@@ -267,7 +273,7 @@ class JobSystemAPI {
     const response = await this.client.get<ApiResponse>(
       `/job-phones/by-client/${clientId}`
     );
-    return response.data.data;
+    return response.data;
   }
 
   async createJobPhone(data: any) {
@@ -301,7 +307,7 @@ class JobSystemAPI {
       '/job-status/contact',
       { params }
     );
-    return response.data.data;
+    return response.data;
   }
 
   async getAllStatuses() {

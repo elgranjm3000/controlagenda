@@ -131,7 +131,7 @@ export function Sidebar() {
                         <Settings className="mr-2 h-4 w-4" />
                         Configuración
                       </Link>*/}
-                      {/*<button
+                      <button
                         onClick={() => {
                           setUserMenuOpen(false);
                           logout();
@@ -140,7 +140,7 @@ export function Sidebar() {
                       >
                         <LogOut className="mr-2 h-4 w-4" />
                         Cerrar Sesión
-                      </button>*/}
+                      </button>
                     </div>
                   </div>
                 </>

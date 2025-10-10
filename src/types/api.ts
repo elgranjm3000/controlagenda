@@ -753,3 +753,14 @@ export interface JobAttribQueryParams {
   per_page?: number;
   page?: number;
 }
+
+
+export interface summaryQueryParams {
+  success?: boolean;
+  message?: string;
+  summary_1?: any;
+  summary_2?: any;
+  summary_3?: any;
+  summary_4?: any;
+  data?: any;
+}

@@ -1,4 +1,4 @@
-'use client';
+  'use client';
 
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -25,8 +25,7 @@ import {
 } from 'lucide-react';
 import { formatDateTime } from '@/lib/utils';
 import { api } from '@/types/services';
-import { JobDayExecutive, JobOffer, JobClientStatus, JobClientStatusContact } from '@/types';
-import { Paginator } from '@/components/Paginator';
+import { JobDayExecutive, JobOffer, JobClientStatus, JobClientStatusContact, summaryQueryParams,PaginatedResponse,ApiResponse } from '@/types';
 
 // Modal para agregar/editar ejecutivo
 const ExecutiveModal = ({ 
@@ -41,52 +40,62 @@ const ExecutiveModal = ({
   onSave: () => void; 
 }) => {
   const [formData, setFormData] = useState({
-    id_offers: '',
-    id_client: '',
-    dv_client: '',
-    id_executive: '',
-    dv_executive: '',
-    name: '',
-    last_name1: '',
-    last_name2: '',
-    id_office: '',
-    id_status: 1,
-    id_contact: 0,
-    scheduled_date: '',
-    attrib1: '',
-    attrib2: '',
-    attrib3: '',
-    attrib4: '',
-    attrib5: ''
+    id_offers: '', id_client: '', dv_client: '', id_executive: '', dv_executive: '',
+    name: '', last_name1: '', last_name2: '', id_office: '', id_status: 1, id_contact: 0,
+    scheduled_date: '', attrib1: '', attrib2: '', attrib3: '', attrib4: '', attrib5: '', comment: ''
   });
+  
   const [offers, setOffers] = useState<JobOffer[]>([]);
   const [statuses, setStatuses] = useState<JobClientStatus[]>([]);
   const [contactStatuses, setContactStatuses] = useState<JobClientStatusContact[]>([]);
+  const [phones, setPhones] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<any>({});
+  const [attibut, setattribut] = useState<any>({});
+  const [statusYes, setStatusYes] = useState<any[]>([]);
+  const [StatusNo, setStatusNo] = useState<any[]>([]);
+  
+  // Estado para las selecciones de teléfonos CON COMENTARIO INDIVIDUAL
+  const [phoneSelections, setPhoneSelections] = useState<{
+    [key: number]: {
+      contacted: 'yes' | 'no' | null;
+      selectedStatus: number | null;
+      comment: string; // ← AÑADIDO: comentario por teléfono
+    }
+  }>({});
 
   useEffect(() => {
     const loadFormData = async () => {
       try {
-        const [offersRes, statusesRes] = await Promise.all([
+        const [offersRes, statusesRes, setAttib, statusYesRes, StatusNoRes] = await Promise.all([
           api.getJobOffers({ active: true }),
-          api.getAllStatuses()
+          api.getAllStatuses(),
+          api.getJobAttribs(),
+          api.getContactStatuses({ id_status: 2, is_life: true }),
+          api.getContactStatuses({ id_status: 3, is_life: true }),
         ]);
+        
         setOffers(offersRes.data || []);
         setStatuses(statusesRes?.data?.data?.client_statuses || []);
         setContactStatuses(statusesRes?.data?.data?.contact_statuses || []);
+        setattribut(setAttib?.data[0] || {});
+        setStatusYes(statusYesRes?.data || []);
+        setStatusNo(StatusNoRes?.data || []);
+        
+        if (executive?.id_client) {
+          const phonesRes = await api.getPhonesByClient(executive.id_client);
+          setPhones(phonesRes.data.phones || []);
+        }
       } catch (error) {
         console.error('Error cargando datos del formulario:', error);
-        setOffers([]);
-        setStatuses([]);
-        setContactStatuses([]);
       }
     };
 
     if (isOpen) {
       loadFormData();
+      setPhoneSelections({});
     }
-  }, [isOpen]);
+  }, [isOpen, executive]);
 
   useEffect(() => {
     if (executive) {
@@ -107,15 +116,76 @@ const ExecutiveModal = ({
         attrib2: executive.attrib2 || '',
         attrib3: executive.attrib3 || '',
         attrib4: executive.attrib4 || '',
-        attrib5: executive.attrib5 || ''
+        attrib5: executive.attrib5 || '',
+        comment: ''
       });
     }
   }, [executive]);
+
+  // Manejar cambio de contacto (Si/No)
+  const handleContactChange = (phoneIndex: number, value: 'yes' | 'no') => {
+    setPhoneSelections(prev => ({
+      ...prev,
+      [phoneIndex]: {
+        contacted: value,
+        selectedStatus: null,
+        comment: '' // ← Resetear comentario
+      }
+    }));
+  };
+
+  // Manejar cambio de estado en el select
+  const handleStatusChange = (phoneIndex: number, statusId: number) => {
+    setPhoneSelections(prev => ({
+      ...prev,
+      [phoneIndex]: {
+        ...prev[phoneIndex],
+        selectedStatus: statusId
+      }
+    }));
+  };
+
+  // ← NUEVO: Manejar cambio de comentario individual
+  const handleCommentChange = (phoneIndex: number, comment: string) => {
+    setPhoneSelections(prev => ({
+      ...prev,
+      [phoneIndex]: {
+        ...prev[phoneIndex],
+        comment: comment
+      }
+    }));
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setErrors({});
+
+    // Validación: Si hay contacto "Sí", el comentario es obligatorio POR CADA TELÉFONO
+    const contactsWithoutComment = Object.entries(phoneSelections).filter(
+      ([_, sel]) => sel?.contacted === 'yes' && !sel?.comment?.trim()
+    );
+    
+    if (contactsWithoutComment.length > 0) {
+      setErrors({ 
+        comment: ['El comentario es obligatorio para cada teléfono contactado'] 
+      });
+      setLoading(false);
+      return;
+    }
+
+    // Validación: Verificar que si hay contacto seleccionado, tenga un estado de gestión
+    const incompleteSelections = Object.entries(phoneSelections).filter(
+      ([_, sel]) => sel?.contacted && !sel?.selectedStatus
+    );
+
+    if (incompleteSelections.length > 0) {
+      setErrors({ 
+        phone_contacts: ['Debe seleccionar una acción/motivo para cada teléfono contactado'] 
+      });
+      setLoading(false);
+      return;
+    }
 
     try {
       const data = {
@@ -125,13 +195,15 @@ const ExecutiveModal = ({
         id_executive: parseInt(formData.id_executive),
         id_status: parseInt(formData.id_status.toString()),
         id_contact: parseInt(formData.id_contact.toString()),
+        phone_contacts: phoneSelections, // Incluye contacted, selectedStatus Y comment
       };
 
-      if (executive) {
+     /* if (executive) {
         await api.updateJobExecutive(executive.id, data);
       } else {
         await api.createJobExecutive(data);
-      }
+      }*/
+     console.log('Datos a enviar:', data);
       onSave();
       onClose();
     } catch (error: any) {
@@ -143,248 +215,339 @@ const ExecutiveModal = ({
 
   if (!isOpen) return null;
 
+  const selectedOffer = offers.find(o => o.id_offers.toString() === formData.id_offers);
+  const currentStatus = statuses.find(s => s.id_status === formData.id_status);
+  const currentContact = contactStatuses.find(c => c.id_contact === formData.id_contact);
+  const requiresScheduledDate = currentContact?.is_scheduled === true;
+
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 overflow-y-auto">
-      <div className="bg-white rounded-lg p-6 w-full max-w-2xl my-8">
-        <div className="flex justify-between items-center mb-4">
-          <h2 className="text-xl font-bold">
-            {executive ? 'Editar Ejecutivo' : 'Nuevo Ejecutivo'}
-          </h2>
-          <Button variant="ghost" size="sm" onClick={onClose}>
-            <X className="h-4 w-4" />
-          </Button>
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 overflow-y-auto p-4">
+      <div className="bg-white rounded-lg w-full max-w-5xl my-8 max-h-[90vh] overflow-y-auto">
+        {/* Header */}
+        <div className="bg-gradient-to-r from-purple-600 to-blue-600 text-white px-6 py-4 rounded-t-lg sticky top-0 z-10">
+          <div className="flex justify-between items-center">
+            <h2 className="text-xl font-bold">
+              {executive ? 'Editar Agenda (Popup registro evento atención al cliente)' : 'Nuevo Ejecutivo'}
+            </h2>
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              onClick={onClose}
+              className="text-white hover:bg-white/20"
+            >
+              <X className="h-5 w-5" />
+            </Button>
+          </div>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <Label htmlFor="id_offers">Oferta/Campaña</Label>
-              <select
-                id="id_offers"
-                value={formData.id_offers}
-                onChange={(e) => setFormData({ ...formData, id_offers: e.target.value })}
-                className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm"
-                required
-                disabled={!!executive}
-              >
-                <option value="">Seleccionar oferta</option>
-                {offers.map(offer => (
-                  <option key={offer.id_offers} value={offer.id_offers}>
-                    {offer.descrip}
-                  </option>
-                ))}
-              </select>
-              {errors.id_offers && (
-                <p className="text-sm text-red-600 mt-1">{errors.id_offers[0]}</p>
+        <form onSubmit={handleSubmit} className="p-6">
+          <div className="space-y-6">
+            
+            {/* Cliente y Campaña */}
+            <div className="bg-blue-50 p-4 rounded-lg space-y-3">
+              <div>
+                <Label className="text-sm font-semibold text-gray-700">Cliente</Label>
+                <p className="text-lg font-bold text-gray-900">
+                  {executive ? `${formData.name} ${formData.last_name1}` : 'Nuevo Cliente'}
+                </p>
+              </div>
+              <div>
+                <Label className="text-sm font-semibold text-gray-700">Campaña</Label>
+                <p className="text-base font-semibold text-gray-900">
+                  {selectedOffer?.descrip || 'Seleccione una campaña'}
+                </p>
+              </div>
+            </div>
+
+            {/* Información de Oferta */}
+            {selectedOffer && attibut && (
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <div>
+                  <Label className="text-gray-600">{attibut.attrib15 || 'Oferta'}</Label>
+                  <p className="font-semibold">$2.100.000</p>
+                </div>
+                <div>
+                  <Label className="text-gray-600">{attibut.attrib10 || 'Plazo'}</Label>
+                  <p className="font-semibold">-</p>
+                </div>
+                <div>
+                  <Label className="text-gray-600">{attibut.attrib5 || 'Fecha Vencto TC'}</Label>
+                  <p className="font-semibold">10-12-2025</p>
+                </div>
+                <div>
+                  <Label className="text-gray-600">{attibut.attrib3 || 'Propensión'}</Label>
+                  <p className="font-semibold">Baja</p>
+                </div>
+                <div>
+                  <Label className="text-gray-600">{attibut.attrib6 || 'Actividad TC'}</Label>
+                  <p className="font-semibold">-</p>
+                </div>
+                <div>
+                  <Label className="text-gray-600">{attibut.attrib1 || 'Tipo Base'}</Label>
+                  <p className="font-semibold">Normal</p>
+                </div>
+                <div>
+                  <Label className="text-gray-600">{attibut.attrib11 || 'Saldo TCV'}</Label>
+                  <p className="font-semibold">-</p>
+                </div>
+                <div>
+                  <Label className="text-gray-600">{attibut.attrib9 || 'Cuotas Pagadas REF'}</Label>
+                  <p className="font-semibold">-</p>
+                </div>
+              </div>
+            )}
+
+            {/* Teléfonos Disponibles - TABLA CON COMENTARIO POR FILA */}
+            <div className="border rounded-lg overflow-hidden">
+              <div className="bg-blue-100 px-4 py-2">
+                <h3 className="font-semibold text-sm">Teléfonos disponibles</h3>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-blue-500 text-white">
+                    <tr>
+                      <th className="px-3 py-2 text-left">Tipo</th>
+                      <th className="px-3 py-2 text-left">Comuna</th>
+                      <th className="px-3 py-2 text-left">Región</th>
+                      <th className="px-3 py-2 text-left">Área</th>
+                      <th className="px-3 py-2 text-left">Número</th>
+                      <th className="px-3 py-2 text-left">Contacto</th>
+                      <th className="px-3 py-2 text-left">Gestión</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {phones.length > 0 ? (
+                      phones.map((phone, idx) => {
+                        const selection = phoneSelections[idx];
+                        const showStatusYes = selection?.contacted === 'yes';
+                        const showStatusNo = selection?.contacted === 'no';
+
+                        return (
+                          <tr key={idx} className="border-b hover:bg-gray-50">
+                            <td className="px-3 py-2">{phone.attrib1 || 'móvil'}</td>
+                            <td className="px-3 py-2">{phone.attrib2 || '-'}</td>
+                            <td className="px-3 py-2">{phone.attrib3 || '-'}</td>
+                            <td className="px-3 py-2">{phone.attrib4 || '-'}</td>
+                            <td className="px-3 py-2 font-mono">{phone.phone}</td>
+                            
+                            {/* Columna Contacto */}
+                            <td className="px-3 py-2">
+                              <div className="flex items-center space-x-4">
+                                <label className="flex items-center space-x-1 cursor-pointer">
+                                  <input
+                                    type="radio"
+                                    name={`contact-${idx}`}
+                                    checked={selection?.contacted === 'yes'}
+                                    onChange={() => handleContactChange(idx, 'yes')}
+                                    className="w-4 h-4 text-green-600"
+                                  />
+                                  <span className="text-green-600 font-medium">Sí</span>
+                                </label>
+                                
+                                <label className="flex items-center space-x-1 cursor-pointer">
+                                  <input
+                                    type="radio"
+                                    name={`contact-${idx}`}
+                                    checked={selection?.contacted === 'no'}
+                                    onChange={() => handleContactChange(idx, 'no')}
+                                    className="w-4 h-4 text-red-600"
+                                  />
+                                  <span className="text-red-600 font-medium">No</span>
+                                </label>
+                              </div>
+                            </td>
+
+                            {/* Columna Gestión con Select Y Comentario debajo */}
+                            <td className="px-3 py-2">
+                              {!selection?.contacted && (
+                                <div className="text-xs text-gray-400 italic">
+                                  <span className="text-blue-600">▶</span> Seleccione contacto primero
+                                </div>
+                              )}
+
+                              {(showStatusYes || showStatusNo) && (
+                                <div className="space-y-2">
+                                  {/* SELECT */}
+                                  <select
+                                    value={selection.selectedStatus || ''}
+                                    onChange={(e) => handleStatusChange(idx, parseInt(e.target.value))}
+                                    className={`w-full px-2 py-1.5 text-xs border rounded focus:ring-1 ${
+                                      showStatusYes 
+                                        ? 'border-green-300 bg-green-50 focus:border-green-500 focus:ring-green-500' 
+                                        : 'border-red-300 bg-red-50 focus:border-red-500 focus:ring-red-500'
+                                    }`}
+                                  >
+                                    <option value="">{showStatusYes ? 'Seleccione acción...' : 'Seleccione motivo...'}</option>
+                                    {(showStatusYes ? statusYes : StatusNo).map((status: any) => (
+                                      <option key={status.id_contact} value={status.id_contact}>
+                                        {status.descrip}
+                                      </option>
+                                    ))}
+                                  </select>
+
+                                  {/* TEXTAREA DE COMENTARIO - SOLO SI ES "SÍ" */}
+                                  {showStatusYes && (
+                                    <div className="space-y-1">
+                                      <textarea
+                                        value={selection.comment || ''}
+                                        onChange={(e) => handleCommentChange(idx, e.target.value)}
+                                        placeholder="Comentario obligatorio..."
+                                        rows={2}
+                                        className={`w-full px-2 py-1.5 text-xs border-2 rounded resize-none focus:ring-1 ${
+                                          selection.comment?.trim() 
+                                            ? 'border-green-300 bg-green-50 focus:border-green-500' 
+                                            : 'border-yellow-300 bg-yellow-50 focus:border-yellow-500'
+                                        }`}
+                                      />
+                                      {!selection.comment?.trim() && (
+                                        <div className="text-xs text-yellow-700 font-medium">
+                                          ⚠️ Comentario requerido
+                                        </div>
+                                      )}
+                                      {selection.comment?.trim() && (
+                                        <div className="text-xs text-green-600 font-medium">
+                                          ✓ Comentario agregado
+                                        </div>
+                                      )}
+                                    </div>
+                                  )}
+
+                                  {selection.selectedStatus && !showStatusYes && (
+                                    <div className="text-xs text-red-600 font-medium">
+                                      ✓ Motivo seleccionado
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })
+                    ) : (
+                      <tr>
+                        <td colSpan={7} className="px-3 py-4 text-center text-gray-500">
+                          No hay teléfonos disponibles
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Resumen de selecciones */}
+              {phones.length > 0 && Object.keys(phoneSelections).length > 0 && (
+                <div className="bg-gray-50 px-4 py-3 border-t">
+                  <p className="text-xs font-semibold text-gray-700 mb-2">Resumen de contactos realizados:</p>
+                  <div className="space-y-1">
+                    {Object.entries(phoneSelections).map(([index, selection]) => {
+                      if (!selection.contacted) return null;
+                      
+                      const phone = phones[parseInt(index)];
+                      const statusList = selection.contacted === 'yes' ? statusYes : StatusNo;
+                      const selectedStatusObj = statusList?.find((s: any) => s.id_contact === selection.selectedStatus);
+                      const isIncomplete = !selection.selectedStatus || (selection.contacted === 'yes' && !selection.comment?.trim());
+                      
+                      return (
+                        <div key={index} className={`text-xs flex items-center flex-wrap gap-2 ${isIncomplete ? 'bg-yellow-50 p-2 rounded border border-yellow-200' : ''}`}>
+                          <span className="font-mono bg-white px-2 py-1 rounded border">{phone?.phone}</span>
+                          <span>→</span>
+                          <span className={`px-2 py-1 rounded ${selection.contacted === 'yes' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                            {selection.contacted === 'yes' ? '✓ Contactado' : '✗ No contactado'}
+                          </span>
+                          {selectedStatusObj ? (
+                            <>
+                              <span>→</span>
+                              <span className="font-medium bg-blue-100 text-blue-700 px-2 py-1 rounded">
+                                {selectedStatusObj.descrip}
+                              </span>
+                            </>
+                          ) : (
+                            <>
+                              <span>→</span>
+                              <span className="text-yellow-700 font-semibold px-2 py-1 rounded bg-yellow-100">
+                                ⚠️ Falta seleccionar {selection.contacted === 'yes' ? 'acción' : 'motivo'}
+                              </span>
+                            </>
+                          )}
+                          {/* MOSTRAR COMENTARIO EN EL RESUMEN */}
+                          {selection.contacted === 'yes' && (
+                            selection.comment?.trim() ? (
+                              <>
+                                <span>→</span>
+                                <span className="text-green-700 bg-green-100 px-2 py-1 rounded max-w-xs truncate">
+                                  💬 {selection.comment}
+                                </span>
+                              </>
+                            ) : (
+                              <>
+                                <span>→</span>
+                                <span className="text-yellow-700 font-semibold px-2 py-1 rounded bg-yellow-100">
+                                  ⚠️ Falta comentario
+                                </span>
+                              </>
+                            )
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Advertencia si hay selecciones incompletas */}
+                  {Object.values(phoneSelections).some(sel => 
+                    sel?.contacted && (!sel?.selectedStatus || (sel?.contacted === 'yes' && !sel?.comment?.trim()))
+                  ) && (
+                    <div className="mt-3 p-2 bg-yellow-100 border border-yellow-300 rounded">
+                      <p className="text-xs text-yellow-800 font-semibold">
+                        ⚠️ Complete la gestión y comentarios para todos los teléfonos contactados antes de grabar
+                      </p>
+                    </div>
+                  )}
+                </div>
               )}
             </div>
 
-            <div>
-              <Label htmlFor="id_office">Oficina</Label>
-              <Input
-                id="id_office"
-                value={formData.id_office}
-                onChange={(e) => setFormData({ ...formData, id_office: e.target.value })}
-                placeholder="Código de oficina"
-              />
-            </div>
+            {/* NOTA: Se eliminó el campo de comentario global, 
+                 ahora cada teléfono tiene su propio comentario en la tabla */}
+
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <Label htmlFor="id_client">RUT Cliente</Label>
-              <div className="flex gap-2">
-                <Input
-                  id="id_client"
-                  type="number"
-                  value={formData.id_client}
-                  onChange={(e) => setFormData({ ...formData, id_client: e.target.value })}
-                  placeholder="12345678"
-                  required
-                  className="flex-1"
-                />
-                <Input
-                  value={formData.dv_client}
-                  onChange={(e) => setFormData({ ...formData, dv_client: e.target.value })}
-                  placeholder="K"
-                  maxLength={1}
-                  className="w-16"
-                  required
-                />
-              </div>
-            </div>
-
-            <div>
-              <Label htmlFor="id_executive">RUT Ejecutivo</Label>
-              <div className="flex gap-2">
-                <Input
-                  id="id_executive"
-                  type="number"
-                  value={formData.id_executive}
-                  onChange={(e) => setFormData({ ...formData, id_executive: e.target.value })}
-                  placeholder="87654321"
-                  required
-                  className="flex-1"
-                />
-                <Input
-                  value={formData.dv_executive}
-                  onChange={(e) => setFormData({ ...formData, dv_executive: e.target.value })}
-                  placeholder="K"
-                  maxLength={1}
-                  className="w-16"
-                  required
-                />
-              </div>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-3 gap-4">
-            <div>
-              <Label htmlFor="name">Nombre</Label>
-              <Input
-                id="name"
-                value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                placeholder="Juan"
-                required
-              />
-            </div>
-
-            <div>
-              <Label htmlFor="last_name1">Apellido Paterno</Label>
-              <Input
-                id="last_name1"
-                value={formData.last_name1}
-                onChange={(e) => setFormData({ ...formData, last_name1: e.target.value })}
-                placeholder="Pérez"
-                required
-              />
-            </div>
-
-            <div>
-              <Label htmlFor="last_name2">Apellido Materno</Label>
-              <Input
-                id="last_name2"
-                value={formData.last_name2}
-                onChange={(e) => setFormData({ ...formData, last_name2: e.target.value })}
-                placeholder="González"
-              />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-3 gap-4">
-            <div>
-              <Label htmlFor="id_status">Estado</Label>
-              <select
-                id="id_status"
-                value={formData.id_status}
-                onChange={(e) => setFormData({ ...formData, id_status: parseInt(e.target.value) })}
-                className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm"
-                required
-              >
-                <option value="">Seleccionar estado</option>
-                {statuses && statuses.length > 0 && statuses.map(status => (
-                  <option key={status.id_status} value={status.id_status}>
-                    {status.descrip}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <Label htmlFor="id_contact">Tipo de Contacto</Label>
-              <select
-                id="id_contact"
-                value={formData.id_contact}
-                onChange={(e) => setFormData({ ...formData, id_contact: parseInt(e.target.value) })}
-                className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm"
-              >
-                <option value="0">Sin contacto</option>
-                {contactStatuses && contactStatuses.map(contact => (
-                  <option key={contact.id_contact} value={contact.id_contact}>
-                    {contact.descrip}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <Label htmlFor="scheduled_date">Fecha Agendada</Label>
-              <Input
-                id="scheduled_date"
-                type="datetime-local"
-                value={formData.scheduled_date}
-                onChange={(e) => setFormData({ ...formData, scheduled_date: e.target.value })}
-              />
-            </div>
-          </div>
-
-          <div className="border-t pt-4">
-            <h3 className="font-semibold mb-3">Información Adicional</h3>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="attrib1">Teléfono</Label>
-                <Input
-                  id="attrib1"
-                  value={formData.attrib1}
-                  onChange={(e) => setFormData({ ...formData, attrib1: e.target.value })}
-                  placeholder="+56 9 1234 5678"
-                />
-              </div>
-              <div>
-                <Label htmlFor="attrib2">Email</Label>
-                <Input
-                  id="attrib2"
-                  type="email"
-                  value={formData.attrib2}
-                  onChange={(e) => setFormData({ ...formData, attrib2: e.target.value })}
-                  placeholder="correo@ejemplo.com"
-                />
-              </div>
-              <div>
-                <Label htmlFor="attrib3">Dirección</Label>
-                <Input
-                  id="attrib3"
-                  value={formData.attrib3}
-                  onChange={(e) => setFormData({ ...formData, attrib3: e.target.value })}
-                  placeholder="Dirección"
-                />
-              </div>
-              <div>
-                <Label htmlFor="attrib4">Ciudad</Label>
-                <Input
-                  id="attrib4"
-                  value={formData.attrib4}
-                  onChange={(e) => setFormData({ ...formData, attrib4: e.target.value })}
-                  placeholder="Ciudad"
-                />
-              </div>
-            </div>
-          </div>
-
-          <div className="flex space-x-3 pt-4">
+          {/* Botones de Acción */}
+          <div className="flex justify-end space-x-3 mt-8 pt-6 border-t">
             <Button
               type="button"
               variant="outline"
               onClick={onClose}
-              className="flex-1"
+              className="px-6"
             >
               Cancelar
             </Button>
             <Button
               type="submit"
               disabled={loading}
-              className="flex-1 bg-gradient-to-r from-purple-600 to-blue-600"
+              className="px-8 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700"
             >
-              {loading ? 'Guardando...' : executive ? 'Actualizar' : 'Crear'}
+              {loading ? 'Guardando...' : 'Grabar Acción'}
             </Button>
           </div>
+
+          {/* Errores */}
+          {Object.keys(errors).length > 0 && (
+            <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg">
+              <p className="text-sm text-red-800 font-semibold mb-2">Errores de validación:</p>
+              <ul className="text-sm text-red-700 list-disc list-inside">
+                {Object.entries(errors).map(([field, messages]: [string, any]) => (
+                  <li key={field}>
+                    {field}: {Array.isArray(messages) ? messages.join(', ') : messages}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </form>
       </div>
     </div>
   );
 };
-
 const StatusBadge = ({ status }: { status?: JobClientStatus }) => {
   if (!status) return null;
   
@@ -467,9 +630,9 @@ export default function JobExecutivesPage() {
   const [offers, setOffers] = useState<JobOffer[]>([]);
   const [statuses, setStatuses] = useState<JobClientStatus[]>([]);
   const [paginationTotal, setPaginationTotal] = useState(0);
-  // Estados para paginación
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
+  const [fetchingSummary, setFetchingSummary] = useState<summaryQueryParams>({} as summaryQueryParams);
 
   const fetchExecutives = async () => {
     try {
@@ -497,13 +660,15 @@ export default function JobExecutivesPage() {
 
   const fetchFilters = async () => {
     try {
-      const [offersRes, statusesRes] = await Promise.all([
+      const [offersRes, statusesRes, summary] = await Promise.all([
         api.getJobOffers({ active: true }),
-        api.getClientStatuses(),                
+        api.getClientStatuses(), 
+        api.getSummary()               
       ]);
     
       setOffers(offersRes.data || []);
       setStatuses(statusesRes.data || []);
+      setFetchingSummary(summary.data || {} as summaryQueryParams);
     } catch (error) {
       console.error('Error cargando filtros:', error);
       setOffers([]);
@@ -542,7 +707,6 @@ export default function JobExecutivesPage() {
     }
   };
 
-  // Filtrar ejecutivos (búsqueda del lado del cliente)
   const filteredExecutives = executives.filter(executive => {
     const fullName = `${executive.name} ${executive.last_name1} ${executive.last_name2}`.toLowerCase();
     const rut = `${executive.id_executive}-${executive.dv_executive}`;
@@ -551,17 +715,13 @@ export default function JobExecutivesPage() {
                          executive.id_office?.toLowerCase().includes(searchQuery.toLowerCase());
     return matchesSearch;
   });
-const paginatedExecutives = filteredExecutives;
 
-  // Calcular paginación
+  const paginatedExecutives = filteredExecutives;
   const totalItems = paginationTotal;  
   const totalPages = Math.ceil(totalItems / itemsPerPage);
-  console.log({ totalItems, totalPages, itemsPerPage });  
   const startIndex = (currentPage - 1) * itemsPerPage;
   const endIndex = startIndex + itemsPerPage;
-  //const paginatedExecutives = filteredExecutives.slice(startIndex, endIndex);
 
-  // Funciones de paginación
   const goToPage = (page: number) => {
     if (page >= 1 && page <= totalPages) {
       setCurrentPage(page);
@@ -615,10 +775,10 @@ const paginatedExecutives = filteredExecutives;
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-muted-foreground">Total Ejecutivos</p>
-                <p className="text-2xl font-bold">{executives.length}</p>
+                <p className="text-sm font-medium text-muted-foreground">{fetchingSummary.summary_1?.title || "Total Clientes"}</p>
+                <p className="text-2xl font-bold">{fetchingSummary.summary_1?.maskAmount || 0}</p>
                 <div className="flex items-center text-sm text-blue-600">
-                  <span>En todas las campañas</span>
+                  <span>{fetchingSummary.summary_1?.footer || ""}</span>
                 </div>
               </div>
               <div className="p-3 rounded-full bg-blue-100 text-blue-600">
@@ -632,12 +792,12 @@ const paginatedExecutives = filteredExecutives;
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-muted-foreground">Con Contactos</p>
+                <p className="text-sm font-medium text-muted-foreground">{fetchingSummary.summary_2?.title || "Clientes Sin acciones"}</p>
                 <p className="text-2xl font-bold">
-                  {executives.filter(e => (e.contacts_count || 0) > 0).length}
+                  {fetchingSummary.summary_2?.maskAmount || 0}
                 </p>
                 <div className="flex items-center text-sm text-green-600">
-                  <span>Ejecutivos activos</span>
+                  <span>{fetchingSummary.summary_2?.footer || ""}</span>
                 </div>
               </div>
               <div className="p-3 rounded-full bg-green-100 text-green-600">
@@ -651,12 +811,12 @@ const paginatedExecutives = filteredExecutives;
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-muted-foreground">Agendados</p>
+                <p className="text-sm font-medium text-muted-foreground">{fetchingSummary.summary_3?.title || "Total acepta"}</p>
                 <p className="text-2xl font-bold">
-                  {executives.filter(e => e.scheduled_date).length}
+                  {fetchingSummary.summary_3?.maskAmount || 0}
                 </p>
                 <div className="flex items-center text-sm text-purple-600">
-                  <span>Con fecha programada</span>
+                  <span>{fetchingSummary.summary_3?.footer || ""}</span>
                 </div>
               </div>
               <div className="p-3 rounded-full bg-purple-100 text-purple-600">
@@ -670,10 +830,10 @@ const paginatedExecutives = filteredExecutives;
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-muted-foreground">Oficinas</p>
-                <p className="text-2xl font-bold">{offices.length}</p>
+                <p className="text-sm font-medium text-muted-foreground">{fetchingSummary.summary_4?.title || "Promedio Contactos"}</p>
+                <p className="text-2xl font-bold">{fetchingSummary.summary_4?.maskAmount || 0}</p>
                 <div className="flex items-center text-sm text-orange-600">
-                  <span>Locaciones únicas</span>
+                  <span>{fetchingSummary.summary_4?.footer || ""}</span>
                 </div>
               </div>
               <div className="p-3 rounded-full bg-orange-100 text-orange-600">
@@ -852,8 +1012,6 @@ const paginatedExecutives = filteredExecutives;
                     </div>
                   </div>
                 ))}
-
-
 
                 {paginatedExecutives.length === 0 && !loading && (
                   <div className="text-center py-12">
