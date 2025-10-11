@@ -28,6 +28,7 @@ import { api } from '@/types/services';
 import { JobDayExecutive, JobOffer, JobClientStatus, JobClientStatusContact, summaryQueryParams,PaginatedResponse,ApiResponse } from '@/types';
 
 // Modal para agregar/editar ejecutivo
+// Modal para agregar/editar ejecutivo
 const ExecutiveModal = ({ 
   isOpen, 
   onClose, 
@@ -54,15 +55,83 @@ const ExecutiveModal = ({
   const [attibut, setattribut] = useState<any>({});
   const [statusYes, setStatusYes] = useState<any[]>([]);
   const [StatusNo, setStatusNo] = useState<any[]>([]);
+  const [executiveList, setExecutiveList] = useState<any | null>(null);
   
   // Estado para las selecciones de teléfonos CON COMENTARIO INDIVIDUAL
   const [phoneSelections, setPhoneSelections] = useState<{
     [key: number]: {
       contacted: 'yes' | 'no' | null;
       selectedStatus: number | null;
-      comment: string; // ← AÑADIDO: comentario por teléfono
+      comment: string;
+      isSaving?: boolean; // Para mostrar indicador de guardado
     }
   }>({});
+
+  // ⭐ NUEVA FUNCIÓN: Guardar contacto automáticamente
+  const saveContact = async (phoneIndex: number) => {
+    const selection = phoneSelections[phoneIndex];
+    const phone = phones[phoneIndex];
+
+    // Validaciones
+    if (!selection?.contacted) return;
+    if (!selection?.selectedStatus) {
+      console.log('Esperando selección de estado...');
+      return;
+    }
+    if (selection.contacted === 'yes' && !selection.comment?.trim()) {
+      console.log('Esperando comentario...');
+      return;
+    }
+
+    // Marcar como guardando
+    setPhoneSelections(prev => ({
+      ...prev,
+      [phoneIndex]: {
+        ...prev[phoneIndex],
+        isSaving: true
+      }
+    }));
+
+    try {
+      const dataToSend = {
+        id_offers: parseInt(formData.id_offers),
+        id_phone: phone.id_phone,
+        id_client: parseInt(formData.id_client),
+        id_executive: parseInt(formData.id_executive),
+        id_status: parseInt(formData.id_status.toString()),
+        id_contact: selection.selectedStatus,
+        scheduled_date: formData.scheduled_date || new Date().toISOString(),
+        comment: selection.comment || '',
+      };
+
+      await api.createJobContact(dataToSend);
+      
+      console.log(`✅ Contacto guardado automáticamente para teléfono ${phone.phone}`);
+      
+      // Marcar como guardado exitosamente
+      setPhoneSelections(prev => ({
+        ...prev,
+        [phoneIndex]: {
+          ...prev[phoneIndex],
+          isSaving: false
+        }
+      }));
+
+    } catch (error: any) {
+      console.error('Error al guardar contacto:', error);
+      setErrors({ 
+        [`phone_${phoneIndex}`]: ['Error al guardar: ' + (error.response?.data?.message || 'Error desconocido')] 
+      });
+      
+      setPhoneSelections(prev => ({
+        ...prev,
+        [phoneIndex]: {
+          ...prev[phoneIndex],
+          isSaving: false
+        }
+      }));
+    }
+  };
 
   useEffect(() => {
     const loadFormData = async () => {
@@ -84,6 +153,9 @@ const ExecutiveModal = ({
         
         if (executive?.id_client) {
           const phonesRes = await api.getPhonesByClient(executive.id_client);
+          const executiveListData = await api.getJobExecutive(executive.id);   
+          console.log('Datos del ejecutivo:', executiveListData.data);       
+          setExecutiveList(executiveListData.data || null);
           setPhones(phonesRes.data.phones || []);
         }
       } catch (error) {
@@ -129,13 +201,13 @@ const ExecutiveModal = ({
       [phoneIndex]: {
         contacted: value,
         selectedStatus: null,
-        comment: '' // ← Resetear comentario
+        comment: ''
       }
     }));
   };
 
-  // Manejar cambio de estado en el select
-  const handleStatusChange = (phoneIndex: number, statusId: number) => {
+  // ⭐ MODIFICADO: Manejar cambio de estado en el select CON GUARDADO AUTOMÁTICO
+  const handleStatusChange = async (phoneIndex: number, statusId: number) => {
     setPhoneSelections(prev => ({
       ...prev,
       [phoneIndex]: {
@@ -143,9 +215,14 @@ const ExecutiveModal = ({
         selectedStatus: statusId
       }
     }));
+
+    // Pequeño delay para que se actualice el estado antes de guardar
+    setTimeout(() => {
+      saveContact(phoneIndex);
+    }, 100);
   };
 
-  // ← NUEVO: Manejar cambio de comentario individual
+  // ⭐ MODIFICADO: Manejar cambio de comentario CON GUARDADO AUTOMÁTICO (debounced)
   const handleCommentChange = (phoneIndex: number, comment: string) => {
     setPhoneSelections(prev => ({
       ...prev,
@@ -154,71 +231,30 @@ const ExecutiveModal = ({
         comment: comment
       }
     }));
+
+    // Debounce: Esperar 1 segundo después de que el usuario deje de escribir
+    if (handleCommentChange.timeout) {
+      clearTimeout(handleCommentChange.timeout);
+    }
+
+    handleCommentChange.timeout = setTimeout(() => {
+      if (comment.trim()) {
+        saveContact(phoneIndex);
+      }
+    }, 1000); // Guardar 1 segundo después de dejar de escribir
   };
+  // Agregar propiedad estática para el timeout
+  (handleCommentChange as any).timeout = null;
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    setErrors({});
-
-    // Validación: Si hay contacto "Sí", el comentario es obligatorio POR CADA TELÉFONO
-    const contactsWithoutComment = Object.entries(phoneSelections).filter(
-      ([_, sel]) => sel?.contacted === 'yes' && !sel?.comment?.trim()
-    );
-    
-    if (contactsWithoutComment.length > 0) {
-      setErrors({ 
-        comment: ['El comentario es obligatorio para cada teléfono contactado'] 
-      });
-      setLoading(false);
-      return;
-    }
-
-    // Validación: Verificar que si hay contacto seleccionado, tenga un estado de gestión
-    const incompleteSelections = Object.entries(phoneSelections).filter(
-      ([_, sel]) => sel?.contacted && !sel?.selectedStatus
-    );
-
-    if (incompleteSelections.length > 0) {
-      setErrors({ 
-        phone_contacts: ['Debe seleccionar una acción/motivo para cada teléfono contactado'] 
-      });
-      setLoading(false);
-      return;
-    }
-
-    try {
-      const data = {
-        ...formData,
-        id_offers: parseInt(formData.id_offers),
-        id_client: parseInt(formData.id_client),
-        id_executive: parseInt(formData.id_executive),
-        id_status: parseInt(formData.id_status.toString()),
-        id_contact: parseInt(formData.id_contact.toString()),
-        phone_contacts: phoneSelections, // Incluye contacted, selectedStatus Y comment
-      };
-
-     /* if (executive) {
-        await api.updateJobExecutive(executive.id, data);
-      } else {
-        await api.createJobExecutive(data);
-      }*/
-     console.log('Datos a enviar:', data);
-      onSave();
-      onClose();
-    } catch (error: any) {
-      setErrors(error.response?.data?.errors || {});
-    } finally {
-      setLoading(false);
-    }
+  // ⭐ NUEVO: Función para cerrar el modal (ya no necesita validación)
+  const handleClose = () => {
+    onSave(); // Refrescar la lista
+    onClose();
   };
 
   if (!isOpen) return null;
 
   const selectedOffer = offers.find(o => o.id_offers.toString() === formData.id_offers);
-  const currentStatus = statuses.find(s => s.id_status === formData.id_status);
-  const currentContact = contactStatuses.find(c => c.id_contact === formData.id_contact);
-  const requiresScheduledDate = currentContact?.is_scheduled === true;
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 overflow-y-auto p-4">
@@ -232,7 +268,7 @@ const ExecutiveModal = ({
             <Button 
               variant="ghost" 
               size="sm" 
-              onClick={onClose}
+              onClick={handleClose}
               className="text-white hover:bg-white/20"
             >
               <X className="h-5 w-5" />
@@ -240,7 +276,7 @@ const ExecutiveModal = ({
           </div>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6">
+        <div className="p-6">
           <div className="space-y-6">
             
             {/* Cliente y Campaña */}
@@ -260,47 +296,106 @@ const ExecutiveModal = ({
             </div>
 
             {/* Información de Oferta */}
-            {selectedOffer && attibut && (
+            {selectedOffer && attibut && executiveList && (
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div>
-                  <Label className="text-gray-600">{attibut.attrib15 || 'Oferta'}</Label>
-                  <p className="font-semibold">$2.100.000</p>
+                  <Label className="text-gray-600">{attibut.attrib1 || 'Tipo Base'}</Label>
+                  <p className="font-semibold">{executiveList?.attrib1 || ''}</p>
                 </div>
                 <div>
-                  <Label className="text-gray-600">{attibut.attrib10 || 'Plazo'}</Label>
-                  <p className="font-semibold">-</p>
-                </div>
-                <div>
-                  <Label className="text-gray-600">{attibut.attrib5 || 'Fecha Vencto TC'}</Label>
-                  <p className="font-semibold">10-12-2025</p>
+                  <Label className="text-gray-600">{attibut.attrib2 || 'Atributo 2'}</Label>
+                  <p className="font-semibold">{executiveList?.attrib2 || ''}</p>
                 </div>
                 <div>
                   <Label className="text-gray-600">{attibut.attrib3 || 'Propensión'}</Label>
-                  <p className="font-semibold">Baja</p>
+                  <p className="font-semibold">{executiveList?.attrib3 || ''}</p>
+                </div>
+                <div>
+                  <Label className="text-gray-600">{attibut.attrib4 || 'Atributo 4'}</Label>
+                  <p className="font-semibold">{executiveList?.attrib4 || ''}</p>
+                </div>
+                <div>
+                  <Label className="text-gray-600">{attibut.attrib5 || 'Fecha Vencto TC'}</Label>
+                  <p className="font-semibold">{executiveList?.attrib5 || ''}</p>
                 </div>
                 <div>
                   <Label className="text-gray-600">{attibut.attrib6 || 'Actividad TC'}</Label>
-                  <p className="font-semibold">-</p>
+                  <p className="font-semibold">{executiveList?.attrib6 || ''}</p>
                 </div>
                 <div>
-                  <Label className="text-gray-600">{attibut.attrib1 || 'Tipo Base'}</Label>
-                  <p className="font-semibold">Normal</p>
+                  <Label className="text-gray-600">{attibut.attrib7 || 'Atributo 7'}</Label>
+                  <p className="font-semibold">{executiveList?.attrib7 || ''}</p>
                 </div>
                 <div>
-                  <Label className="text-gray-600">{attibut.attrib11 || 'Saldo TCV'}</Label>
-                  <p className="font-semibold">-</p>
+                  <Label className="text-gray-600">{attibut.attrib8 || 'Atributo 8'}</Label>
+                  <p className="font-semibold">{executiveList?.attrib8 || ''}</p>
                 </div>
                 <div>
                   <Label className="text-gray-600">{attibut.attrib9 || 'Cuotas Pagadas REF'}</Label>
-                  <p className="font-semibold">-</p>
+                  <p className="font-semibold">{executiveList?.attrib9 || ''}</p>
+                </div>
+                <div>
+                  <Label className="text-gray-600">{attibut.attrib10 || 'Plazo'}</Label>
+                  <p className="font-semibold">{executiveList?.attrib10 || ''}</p>
+                </div>
+                <div>
+                  <Label className="text-gray-600">{attibut.attrib11 || 'Saldo TCV'}</Label>
+                  <p className="font-semibold">{executiveList?.attrib11 || ''}</p>
+                </div>
+                <div>
+                  <Label className="text-gray-600">{attibut.attrib12 || 'Atributo 12'}</Label>
+                  <p className="font-semibold">{executiveList?.attrib12 || ''}</p>
+                </div>
+                <div>
+                  <Label className="text-gray-600">{attibut.attrib13 || 'Atributo 13'}</Label>
+                  <p className="font-semibold">{executiveList?.attrib13 || ''}</p>
+                </div>
+                <div>
+                  <Label className="text-gray-600">{attibut.attrib14 || 'Atributo 14'}</Label>
+                  <p className="font-semibold">{executiveList?.attrib14 || ''}</p>
+                </div>
+                <div>
+                  <Label className="text-gray-600">{attibut.attrib15 || 'Oferta'}</Label>
+                  <p className="font-semibold">{executiveList?.attrib15 || ''}</p>
+                </div>
+                <div>
+                  <Label className="text-gray-600">{attibut.attrib16 || 'Atributo 16'}</Label>
+                  <p className="font-semibold">{executiveList?.attrib16 || ''}</p>
+                </div>
+                <div>
+                  <Label className="text-gray-600">{attibut.attrib17 || 'Atributo 17'}</Label>
+                  <p className="font-semibold">{executiveList?.attrib17 || ''}</p>
+                </div>
+                <div>
+                  <Label className="text-gray-600">{attibut.attrib18 || 'Atributo 18'}</Label>
+                  <p className="font-semibold">{executiveList?.attrib18 || ''}</p>
+                </div>
+                <div>
+                  <Label className="text-gray-600">{attibut.attrib19 || 'Atributo 19'}</Label>
+                  <p className="font-semibold">{executiveList?.attrib19 || ''}</p>
+                </div>
+                <div>
+                  <Label className="text-gray-600">{attibut.attrib20 || 'Atributo 20'}</Label>
+                  <p className="font-semibold">{executiveList?.attrib20 || ''}</p>
+                </div>
+                <div>
+                  <Label className="text-gray-600">{attibut.attrib21 || 'Atributo 21'}</Label>
+                  <p className="font-semibold">{executiveList?.attrib21 || ''}</p>
+                </div>
+                <div>
+                  <Label className="text-gray-600">{attibut.attrib22 || 'Atributo 22'}</Label>
+                  <p className="font-semibold">{executiveList?.attrib22 || ''}</p>
                 </div>
               </div>
             )}
 
-            {/* Teléfonos Disponibles - TABLA CON COMENTARIO POR FILA */}
+            {/* Teléfonos Disponibles */}
             <div className="border rounded-lg overflow-hidden">
-              <div className="bg-blue-100 px-4 py-2">
+              <div className="bg-blue-100 px-4 py-2 flex justify-between items-center">
                 <h3 className="font-semibold text-sm">Teléfonos disponibles</h3>
+                <span className="text-xs text-blue-600 font-medium">
+                  💾 Guardado automático activado
+                </span>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
@@ -357,7 +452,7 @@ const ExecutiveModal = ({
                               </div>
                             </td>
 
-                            {/* Columna Gestión con Select Y Comentario debajo */}
+                            {/* Columna Gestión */}
                             <td className="px-3 py-2">
                               {!selection?.contacted && (
                                 <div className="text-xs text-gray-400 italic">
@@ -368,55 +463,81 @@ const ExecutiveModal = ({
                               {(showStatusYes || showStatusNo) && (
                                 <div className="space-y-2">
                                   {/* SELECT */}
-                                  <select
-                                    value={selection.selectedStatus || ''}
-                                    onChange={(e) => handleStatusChange(idx, parseInt(e.target.value))}
-                                    className={`w-full px-2 py-1.5 text-xs border rounded focus:ring-1 ${
-                                      showStatusYes 
-                                        ? 'border-green-300 bg-green-50 focus:border-green-500 focus:ring-green-500' 
-                                        : 'border-red-300 bg-red-50 focus:border-red-500 focus:ring-red-500'
-                                    }`}
-                                  >
-                                    <option value="">{showStatusYes ? 'Seleccione acción...' : 'Seleccione motivo...'}</option>
-                                    {(showStatusYes ? statusYes : StatusNo).map((status: any) => (
-                                      <option key={status.id_contact} value={status.id_contact}>
-                                        {status.descrip}
-                                      </option>
-                                    ))}
-                                  </select>
+                                  <div className="relative">
+                                    <select
+                                      value={selection.selectedStatus || ''}
+                                      onChange={(e) => handleStatusChange(idx, parseInt(e.target.value))}
+                                      className={`w-full px-2 py-1.5 text-xs border rounded focus:ring-1 ${
+                                        showStatusYes 
+                                          ? 'border-green-300 bg-green-50 focus:border-green-500 focus:ring-green-500' 
+                                          : 'border-red-300 bg-red-50 focus:border-red-500 focus:ring-red-500'
+                                      }`}
+                                    >
+                                      <option value="">{showStatusYes ? 'Seleccione acción...' : 'Seleccione motivo...'}</option>
+                                      {(showStatusYes ? statusYes : StatusNo).map((status: any) => (
+                                        <option key={status.id_contact} value={status.id_contact}>
+                                          {status.descrip}
+                                        </option>
+                                      ))}
+                                    </select>
+                                    {/* ⭐ Indicador de guardado en el select */}
+                                    {selection.isSaving && (
+                                      <div className="absolute right-2 top-1/2 -translate-y-1/2">
+                                        <div className="animate-spin h-3 w-3 border-2 border-blue-600 border-t-transparent rounded-full"></div>
+                                      </div>
+                                    )}
+                                  </div>
 
-                                  {/* TEXTAREA DE COMENTARIO - SOLO SI ES "SÍ" */}
+                                  {/* TEXTAREA DE COMENTARIO */}
                                   {showStatusYes && (
                                     <div className="space-y-1">
-                                      <textarea
-                                        value={selection.comment || ''}
-                                        onChange={(e) => handleCommentChange(idx, e.target.value)}
-                                        placeholder="Comentario obligatorio..."
-                                        rows={2}
-                                        className={`w-full px-2 py-1.5 text-xs border-2 rounded resize-none focus:ring-1 ${
-                                          selection.comment?.trim() 
-                                            ? 'border-green-300 bg-green-50 focus:border-green-500' 
-                                            : 'border-yellow-300 bg-yellow-50 focus:border-yellow-500'
-                                        }`}
-                                      />
-                                      {!selection.comment?.trim() && (
+                                      <div className="relative">
+                                        <textarea
+                                          value={selection.comment || ''}
+                                          onChange={(e) => handleCommentChange(idx, e.target.value)}
+                                          placeholder="Comentario (se guarda automáticamente)..."
+                                          rows={2}
+                                          className={`w-full px-2 py-1.5 text-xs border-2 rounded resize-none focus:ring-1 ${
+                                            selection.comment?.trim() 
+                                              ? 'border-green-300 bg-green-50 focus:border-green-500' 
+                                              : 'border-yellow-300 bg-yellow-50 focus:border-yellow-500'
+                                          }`}
+                                        />
+                                        {/* ⭐ Indicador de guardado en el comentario */}
+                                        {selection.isSaving && (
+                                          <div className="absolute right-2 top-2">
+                                            <div className="animate-spin h-3 w-3 border-2 border-blue-600 border-t-transparent rounded-full"></div>
+                                          </div>
+                                        )}
+                                      </div>
+                                      {!selection.comment?.trim() ? (
                                         <div className="text-xs text-yellow-700 font-medium">
                                           ⚠️ Comentario requerido
                                         </div>
-                                      )}
-                                      {selection.comment?.trim() && (
+                                      ) : !selection.isSaving ? (
                                         <div className="text-xs text-green-600 font-medium">
-                                          ✓ Comentario agregado
+                                          ✓ Guardado
+                                        </div>
+                                      ) : (
+                                        <div className="text-xs text-blue-600 font-medium">
+                                          💾 Guardando...
                                         </div>
                                       )}
                                     </div>
                                   )}
 
-                                  {selection.selectedStatus && !showStatusYes && (
-                                    <div className="text-xs text-red-600 font-medium">
-                                      ✓ Motivo seleccionado
+                                  {selection.selectedStatus && !showStatusYes && !selection.isSaving && (
+                                    <div className="text-xs text-green-600 font-medium">
+                                      ✓ Guardado
                                     </div>
                                   )}
+                                </div>
+                              )}
+
+                              {/* ⭐ Mostrar error si existe */}
+                              {errors[`phone_${idx}`] && (
+                                <div className="text-xs text-red-600 mt-1">
+                                  {errors[`phone_${idx}`][0]}
                                 </div>
                               )}
                             </td>
@@ -448,7 +569,7 @@ const ExecutiveModal = ({
                       const isIncomplete = !selection.selectedStatus || (selection.contacted === 'yes' && !selection.comment?.trim());
                       
                       return (
-                        <div key={index} className={`text-xs flex items-center flex-wrap gap-2 ${isIncomplete ? 'bg-yellow-50 p-2 rounded border border-yellow-200' : ''}`}>
+                        <div key={index} className={`text-xs flex items-center flex-wrap gap-2 ${isIncomplete ? 'bg-yellow-50 p-2 rounded border border-yellow-200' : 'bg-green-50 p-2 rounded border border-green-200'}`}>
                           <span className="font-mono bg-white px-2 py-1 rounded border">{phone?.phone}</span>
                           <span>→</span>
                           <span className={`px-2 py-1 rounded ${selection.contacted === 'yes' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
@@ -469,7 +590,6 @@ const ExecutiveModal = ({
                               </span>
                             </>
                           )}
-                          {/* MOSTRAR COMENTARIO EN EL RESUMEN */}
                           {selection.contacted === 'yes' && (
                             selection.comment?.trim() ? (
                               <>
@@ -487,55 +607,42 @@ const ExecutiveModal = ({
                               </>
                             )
                           )}
+                          {/* ⭐ Indicador de guardado en resumen */}
+                          {selection.isSaving && (
+                            <>
+                              <span>→</span>
+                              <span className="text-blue-700 font-semibold px-2 py-1 rounded bg-blue-100 flex items-center gap-1">
+                                <div className="animate-spin h-3 w-3 border-2 border-blue-600 border-t-transparent rounded-full"></div>
+                                Guardando...
+                              </span>
+                            </>
+                          )}
                         </div>
                       );
                     })}
                   </div>
-
-                  {/* Advertencia si hay selecciones incompletas */}
-                  {Object.values(phoneSelections).some(sel => 
-                    sel?.contacted && (!sel?.selectedStatus || (sel?.contacted === 'yes' && !sel?.comment?.trim()))
-                  ) && (
-                    <div className="mt-3 p-2 bg-yellow-100 border border-yellow-300 rounded">
-                      <p className="text-xs text-yellow-800 font-semibold">
-                        ⚠️ Complete la gestión y comentarios para todos los teléfonos contactados antes de grabar
-                      </p>
-                    </div>
-                  )}
                 </div>
               )}
             </div>
-
-            {/* NOTA: Se eliminó el campo de comentario global, 
-                 ahora cada teléfono tiene su propio comentario en la tabla */}
-
           </div>
 
-          {/* Botones de Acción */}
+          {/* Botón de Cerrar */}
           <div className="flex justify-end space-x-3 mt-8 pt-6 border-t">
             <Button
               type="button"
-              variant="outline"
-              onClick={onClose}
-              className="px-6"
-            >
-              Cancelar
-            </Button>
-            <Button
-              type="submit"
-              disabled={loading}
+              onClick={handleClose}
               className="px-8 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700"
             >
-              {loading ? 'Guardando...' : 'Grabar Acción'}
+              Cerrar
             </Button>
           </div>
 
-          {/* Errores */}
-          {Object.keys(errors).length > 0 && (
+          {/* Errores globales */}
+          {Object.keys(errors).filter(k => !k.startsWith('phone_')).length > 0 && (
             <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg">
-              <p className="text-sm text-red-800 font-semibold mb-2">Errores de validación:</p>
+              <p className="text-sm text-red-800 font-semibold mb-2">Errores:</p>
               <ul className="text-sm text-red-700 list-disc list-inside">
-                {Object.entries(errors).map(([field, messages]: [string, any]) => (
+                {Object.entries(errors).filter(([k]) => !k.startsWith('phone_')).map(([field, messages]: [string, any]) => (
                   <li key={field}>
                     {field}: {Array.isArray(messages) ? messages.join(', ') : messages}
                   </li>
@@ -543,7 +650,7 @@ const ExecutiveModal = ({
               </ul>
             </div>
           )}
-        </form>
+        </div>
       </div>
     </div>
   );

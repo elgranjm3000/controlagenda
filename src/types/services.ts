@@ -157,7 +157,7 @@ class JobSystemAPI {
     const response = await this.client.get<ApiResponse<JobDayExecutive>>(
       `/job-executives/${id}`
     );
-    return response.data.data;
+    return response.data;
   }
 
   async createJobExecutive(data: CreateJobExecutiveRequest) {
