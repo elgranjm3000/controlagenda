@@ -1,6 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  basePath: '/out',
+   basePath: '/out',
   assetPrefix: '/out',
   output: 'export',
   trailingSlash: true,

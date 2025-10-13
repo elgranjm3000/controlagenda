@@ -1,6 +1,6 @@
   'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, use } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -26,6 +26,8 @@ import {
 import { formatDateTime } from '@/lib/utils';
 import { api } from '@/types/services';
 import { JobDayExecutive, JobOffer, JobClientStatus, JobClientStatusContact, summaryQueryParams,PaginatedResponse,ApiResponse } from '@/types';
+import { useAuth } from '@/hooks/use-auth';
+
 
 // Modal para agregar/editar ejecutivo
 // Modal para agregar/editar ejecutivo
@@ -740,6 +742,8 @@ export default function JobExecutivesPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
   const [fetchingSummary, setFetchingSummary] = useState<summaryQueryParams>({} as summaryQueryParams);
+  const { user } = useAuth();
+  
 
   const fetchExecutives = async () => {
     try {
@@ -748,6 +752,7 @@ export default function JobExecutivesPage() {
         with_contacts: 1,
         page: currentPage,
         per_page: itemsPerPage,
+        id_executive: user?.id_executive || undefined,
       };
       
       if (offerFilter !== 'all') params.id_offers = offerFilter;
