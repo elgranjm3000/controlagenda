@@ -1,57 +1,95 @@
 'use client'
 import { useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useAuth } from '@/hooks/use-auth';
 import { authSessionService } from '@/services/auth-session.service';
+import { authApi } from '@/lib/auth';
+import { useAuthStore } from '@/store/auth-store';
+
+// ✅ Bandera global para prevenir que useAuth restaure sesión
+if (typeof window !== 'undefined') {
+  (window as any).__AUTOLOGIN_ACTIVE__ = true;
+}
 
 export default function AutoLogin() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { login, logout } = useAuth();
+  const authStore = useAuthStore();
+  
+  const token = searchParams.get('token');
+  
   const [status, setStatus] = useState('Procesando acceso...');
   const [processing, setProcessing] = useState(false);
 
+  // ✅ Cleanup al desmontar
   useEffect(() => {
-    const token = searchParams.get('token');
-    
-    console.log('🔍 AutoLogin montado/actualizado');
-    console.log('   Token:', token);
-    console.log('   Processing:', processing);
+    return () => {
+      if (typeof window !== 'undefined') {
+        delete (window as any).__AUTOLOGIN_ACTIVE__;
+      }
+    };
+  }, []);
 
+  // ✅ EFECTO PRINCIPAL: Detectar cambio de token y procesar
+  useEffect(() => {
+    console.log('\n🔄 ===== AUTOLOGIN EFFECT =====');
+    console.log('Token actual:', token?.substring(0, 20));
+    
     if (!token) {
+      console.log('❌ No hay token');
       setStatus('Token no encontrado, redirigiendo...');
       setTimeout(() => router.push('/login'), 2000);
       return;
     }
 
-    // Si ya estamos procesando, no hacer nada
-    if (processing) {
-      console.log('⏳ Ya estamos procesando, esperando...');
-      return;
-    }
-
-    // Verificar si necesitamos procesar este token
-    const currentEmail = authSessionService.getCurrentEmail();
+    // Obtener el último token procesado
     const lastToken = sessionStorage.getItem('last_autologin_token');
-
-    console.log('   Email actual:', currentEmail);
-    console.log('   Último token:', lastToken);
-
-    // Si es el mismo token que ya procesamos, redirigir
-    if (token === lastToken && currentEmail) {
-      console.log('✅ Token ya procesado y sesión activa, redirigiendo...');
-      router.push('/dashboard');
+    console.log('Último token guardado:', lastToken?.substring(0, 20) || 'NINGUNO');
+    
+    // ✅ Si hay un token diferente, RECARGAR LA PÁGINA COMPLETAMENTE
+    if (lastToken && lastToken !== token) {
+      console.log('🔥 TOKEN DIFERENTE DETECTADO');
+      console.log('   Anterior:', lastToken.substring(0, 20));
+      console.log('   Nuevo:', token.substring(0, 20));
+      console.log('   🔄 FORZANDO RECARGA COMPLETA DE LA PÁGINA...');
+      
+      // Limpiar TODO
+      sessionStorage.clear();
+      localStorage.clear();
+      
+      // Recargar la página completamente (esto reinicia todo React)
+      window.location.reload();
+      return;
+    }
+    
+    // ✅ Si el token ya fue procesado exitosamente
+    if (lastToken === token) {
+      console.log('✅ Token ya procesado, verificando sesión...');
+      const currentEmail = authSessionService.getCurrentEmail();
+      
+      if (currentEmail) {
+        console.log('✅ Sesión activa, redirigiendo a dashboard...');
+        setTimeout(() => router.push('/out/dashboard'), 500);
+      } else {
+        console.log('⚠️ Token procesado pero sin sesión, reprocesando...');
+        sessionStorage.removeItem('last_autologin_token');
+        handleAutoLogin(token);
+      }
       return;
     }
 
-    // Nuevo token, procesar
-    console.log('🆕 Token nuevo detectado, procesando...');
-    handleAutoLogin(token);
+    // ✅ Token nuevo, procesarlo
+    if (!processing) {
+      console.log('🆕 Nuevo token, iniciando proceso...');
+      handleAutoLogin(token);
+    }
     
-  }, [searchParams.get('token')]); // Reaccionar a cambios en el token
+    console.log('===================================\n');
+  }, [token]);
   
   const handleAutoLogin = async (tempToken: string) => {
-    // Prevenir ejecuciones múltiples
+    console.log('\n🚀 ===== HANDLEAUTOLOGIN INICIADO =====');
+    console.log('Token:', tempToken.substring(0, 20));
+    
     if (processing) {
       console.log('⏸️ Ya está procesando, abortando');
       return;
@@ -91,6 +129,7 @@ export default function AutoLogin() {
       
       if (!validation.valid) {
         setStatus('Token inválido o expirado');
+        setProcessing(false);
         setTimeout(() => router.push('/login'), 2000);
         return;
       }
@@ -98,98 +137,42 @@ export default function AutoLogin() {
       const newEmail = validation.email;
       console.log('✅ Token válido para:', newEmail);
 
-      // PASO 2: Verificar sesión actual
-      console.log('\n📧 Paso 2: Verificando sesión actual...');
-      const currentEmail = authSessionService.getCurrentEmail();
-      console.log('   Email actual:', currentEmail || 'NINGUNO');
-      console.log('   Email nuevo:', newEmail);
-      
-      if (currentEmail) {
-        if (currentEmail !== newEmail) {
-          // Usuario diferente
-          setStatus(`Cerrando sesión de ${currentEmail}...`);
-          console.log('⚠️ Usuario DIFERENTE detectado, limpiando...');
-          
-          // Logout completo
-          try {
-            await logout();
-            console.log('   Logout completado');
-          } catch (error) {
-            console.warn('   Error en logout API:', error);
-          }
-          
-          // Limpiar localStorage
-          authSessionService.clearSession();
-          
-          // Esperar
-          await new Promise(resolve => setTimeout(resolve, 1000));
-          
-          // Verificar limpieza
-          const afterClean = authSessionService.getCurrentEmail();
-          if (afterClean) {
-            console.error('❌ ERROR: No se limpió, forzando...');
-            authSessionService.forceCleanAll();
-            await new Promise(resolve => setTimeout(resolve, 300));
-          } else {
-            console.log('✅ Sesión anterior limpiada');
-          }
-          
-        } else {
-          // Mismo usuario
-          console.log('ℹ️ Mismo usuario, refrescando sesión');
-          authSessionService.clearSession();
-          await new Promise(resolve => setTimeout(resolve, 300));
-        }
-      } else {
-        console.log('ℹ️ No hay sesión previa');
-      }
+      // PASO 2: Limpiar cualquier sesión anterior
+      console.log('\n🧹 Paso 2: Limpiando sesión anterior...');
+      authSessionService.clearSession();
+      authStore.clearAuth();
+      await new Promise(resolve => setTimeout(resolve, 300));
+      console.log('✅ Limpieza completada');
       
       // PASO 3: Login limpio
       console.log('\n🔐 Paso 3: Iniciando login...');
       setStatus('Iniciando sesión...');
       
-      const loginResult = await login({
+      const { user, token } = await authApi.login({
         email: validation.email,
         password: validation.temp_password
       });
       
-      console.log('   Login result:', {
-        success: loginResult.success,
-        hasToken: !!loginResult.token,
-        hasUser: !!loginResult.user
-      });
-      
-      if (!loginResult.success) {
-        console.error('❌ Error en login:', loginResult.error);
-        setStatus('Error: ' + (loginResult.error || 'Error al iniciar sesión'));
-        setTimeout(() => router.push('/login'), 3000);
-        return;
-      }
-
       console.log('✅ Login exitoso');
       
       // PASO 4: Guardar sesión
       console.log('\n💾 Paso 4: Guardando sesión...');
-      if (loginResult.token && loginResult.user) {
-        authSessionService.saveSession({
-          token: loginResult.token,
-          email: validation.email,
-          user: loginResult.user
-        });
-      }
       
-      // Guardar token para evitar reprocesar
+      authStore.setAuth(user, token);
+      
+      authSessionService.saveSession({
+        token: token,
+        email: validation.email,
+        user: user
+      });
+      
+      // ✅ Marcar token como procesado
       sessionStorage.setItem('last_autologin_token', tempToken);
       
-      // Verificar
       const savedEmail = authSessionService.getCurrentEmail();
       const savedToken = authSessionService.getToken();
       console.log('   Email guardado:', savedEmail);
       console.log('   Token presente:', !!savedToken);
-      
-      if (savedEmail !== validation.email) {
-        console.error('❌ ERROR: Email no coincide después de guardar');
-      }
       
       setStatus('¡Acceso concedido! Redirigiendo...');
       
@@ -200,15 +183,13 @@ export default function AutoLogin() {
       // Redirigir
       setTimeout(() => {
         console.log('🚀 Redirigiendo a dashboard...');
-        
-        // IMPORTANTE: Usar window.location para forzar recarga completa
-        // Esto asegura que todos los hooks se reinicialicen
-        window.location.href = '/dashboard';
+        window.location.href = '/out/dashboard';
       }, 1000);
       
     } catch (error) {
       console.error('❌ Error en auto login:', error);
       setStatus('Error de conexión. Redirigiendo...');
+      setProcessing(false);
       setTimeout(() => router.push('/login'), 2000);
     } finally {
       setProcessing(false);
@@ -225,7 +206,6 @@ export default function AutoLogin() {
       gap: '20px',
       backgroundColor: '#f5f5f5'
     }}>
-      {/* Loader animado */}
       <div style={{
         border: '4px solid #e0e0e0',
         borderTop: '4px solid #3498db',
@@ -235,7 +215,6 @@ export default function AutoLogin() {
         animation: 'spin 1s linear infinite'
       }} />
       
-      {/* Mensaje de estado */}
       <div style={{ 
         fontSize: '16px', 
         color: '#333',
@@ -247,33 +226,44 @@ export default function AutoLogin() {
         {status}
       </div>
       
-      {/* Debug info */}
       {process.env.NODE_ENV === 'development' && (
         <div style={{
           position: 'fixed',
           bottom: '10px',
           left: '10px',
-          background: 'rgba(0,0,0,0.85)',
+          background: 'rgba(0,0,0,0.9)',
           color: '#0f0',
-          padding: '12px',
-          borderRadius: '6px',
+          padding: '15px',
+          borderRadius: '8px',
           fontSize: '11px',
           fontFamily: 'Courier New, monospace',
-          maxWidth: '300px'
+          maxWidth: '400px',
+          border: '2px solid #0ff'
         }}>
-          <div style={{ fontWeight: 'bold', marginBottom: '5px', color: '#0ff' }}>
-            🐛 DEBUG
+          <div style={{ fontWeight: 'bold', marginBottom: '8px', color: '#0ff', fontSize: '13px' }}>
+            🐛 DEBUG AUTOLOGIN
           </div>
-          <div>Token: {searchParams.get('token')?.substring(0, 15)}...</div>
-          <div>Processing: {processing ? '✅' : '❌'}</div>
-          <div>Email: {authSessionService.getCurrentEmail() || 'NONE'}</div>
-          <div style={{ marginTop: '5px', fontSize: '9px', color: '#888' }}>
-            Abre la consola para más detalles
+          <div style={{ marginBottom: '3px' }}>
+            <strong style={{ color: '#ff0' }}>Token URL:</strong> {token?.substring(0, 20) || 'NONE'}...
+          </div>
+          <div style={{ marginBottom: '3px' }}>
+            <strong style={{ color: '#ff0' }}>Token Guardado:</strong> {sessionStorage.getItem('last_autologin_token')?.substring(0, 20) || 'NONE'}...
+          </div>
+          <div style={{ marginBottom: '3px' }}>
+            <strong style={{ color: '#ff0' }}>¿Son iguales?:</strong> {token === sessionStorage.getItem('last_autologin_token') ? '✅ SÍ' : '❌ NO'}
+          </div>
+          <div style={{ marginBottom: '3px' }}>
+            <strong style={{ color: '#ff0' }}>Processing:</strong> {processing ? '🔴 SÍ' : '🟢 NO'}
+          </div>
+          <div style={{ marginBottom: '3px' }}>
+            <strong style={{ color: '#ff0' }}>Email guardado:</strong> {authSessionService.getCurrentEmail() || 'NONE'}
+          </div>
+          <div style={{ marginTop: '8px', fontSize: '9px', color: '#888', borderTop: '1px solid #333', paddingTop: '5px' }}>
+            💡 Si cambias el token en la URL, la página se recargará automáticamente
           </div>
         </div>
       )}
       
-      {/* Animación CSS */}
       <style jsx>{`
         @keyframes spin {
           0% { transform: rotate(0deg); }

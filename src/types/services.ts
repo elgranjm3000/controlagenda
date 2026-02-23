@@ -221,6 +221,14 @@ class JobSystemAPI {
     return response.data;
   }
 
+   async updateJobContact(id: number,  data: CreateJobContactRequest) {
+    const response = await this.client.put<ApiResponse<JobDayContact>>(
+      `/job-contacts/${id}`,
+      data
+    );
+    return response.data.data;
+  }
+
   async createJobContact(data: CreateJobContactRequest) {
     const response = await this.client.post<ApiResponse<JobDayContact>>(
       '/job-contacts',

@@ -19,7 +19,7 @@ import {
   XCircle,
   X,
 } from 'lucide-react';
-import { formatDateTime, formatCurrency } from '@/lib/utils';
+import { formatDateTime, formatCurrency, formatCLP } from '@/lib/utils';
 import { api } from '@/lib/api';
 import { Appointment, Client, Service, User } from '@/types';
 
@@ -624,7 +624,7 @@ export default function AppointmentsPage() {
         <Card className="hover-lift">
           <CardContent className="p-4 text-center">
             <div className="text-2xl font-bold text-purple-600">
-              {formatCurrency(appointments.reduce((sum, a) => sum + (a.service?.price || 0), 0))}
+              {formatCLP(appointments.reduce((sum, a) => sum + (a.service?.price || 0), 0))}
             </div>
             <div className="text-sm text-gray-600">Ingresos Totales</div>
           </CardContent>

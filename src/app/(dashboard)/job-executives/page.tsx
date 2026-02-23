@@ -1,19 +1,19 @@
-  'use client';
+'use client';
 
-import { useState, useEffect, use } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { useOfferStore } from '@/store/useOfferStore';
+
 import {
   Users,
   Search,
   Plus,
   Filter,
   MoreHorizontal,
-  Eye,
   Edit,
-  Trash2,
   Calendar,
   Building,
   CheckCircle,
@@ -22,14 +22,16 @@ import {
   Phone,
   ChevronLeft,
   ChevronRight,
+  ChevronUp,
+  ChevronDown,
+  History
 } from 'lucide-react';
-import { formatDateTime } from '@/lib/utils';
+import { formatDateTime, formatRUT, formatCLP } from '@/lib/utils';
 import { api } from '@/types/services';
-import { JobDayExecutive, JobOffer, JobClientStatus, JobClientStatusContact, summaryQueryParams,PaginatedResponse,ApiResponse } from '@/types';
+import { JobDayExecutive, JobOffer, JobClientStatus, JobClientStatusContact, summaryQueryParams } from '@/types';
 import { useAuth } from '@/hooks/use-auth';
+import NewClientModal from '@/components/modals/newClientModal';
 
-
-// Modal para agregar/editar ejecutivo
 // Modal para agregar/editar ejecutivo
 const ExecutiveModal = ({ 
   isOpen, 
@@ -58,82 +60,110 @@ const ExecutiveModal = ({
   const [statusYes, setStatusYes] = useState<any[]>([]);
   const [StatusNo, setStatusNo] = useState<any[]>([]);
   const [executiveList, setExecutiveList] = useState<any | null>(null);
-  
+  const [showHistory, setShowHistory] = useState(false);
+  const [contactHistory, setContactHistory] = useState<any[]>([]);
+
+
   // Estado para las selecciones de teléfonos CON COMENTARIO INDIVIDUAL
   const [phoneSelections, setPhoneSelections] = useState<{
     [key: number]: {
-      contacted: 'yes' | 'no' | null;
+      contacted: '1' | '0' | null;
       selectedStatus: number | null;
       comment: string;
-      isSaving?: boolean; // Para mostrar indicador de guardado
+      isSaving?: boolean;
+      contactId?: number; // ⭐ ID del contacto existente para UPDATE
     }
   }>({});
 
-  // ⭐ NUEVA FUNCIÓN: Guardar contacto automáticamente
-  const saveContact = async (phoneIndex: number) => {
-    const selection = phoneSelections[phoneIndex];
-    const phone = phones[phoneIndex];
 
-    // Validaciones
-    if (!selection?.contacted) return;
-    if (!selection?.selectedStatus) {
-      console.log('Esperando selección de estado...');
-      return;
-    }
-    if (selection.contacted === 'yes' && !selection.comment?.trim()) {
-      console.log('Esperando comentario...');
-      return;
-    }
 
-    // Marcar como guardando
+
+
+
+  // ⭐ MODIFICADA: Guardar o actualizar contacto automáticamente
+const saveContact = async (phoneIndex: number) => {
+  const selection = phoneSelections[phoneIndex];
+  const phone = phones[phoneIndex];
+
+  if (!selection?.contacted) return;
+  if (!selection?.selectedStatus) return;
+  if (selection.contacted === 'yes' && !selection.comment?.trim()) return;
+
+  setPhoneSelections(prev => ({
+    ...prev,
+    [phoneIndex]: { ...prev[phoneIndex], isSaving: true }
+  }));
+
+  try {
+    const dataToSend = {
+      id_offers: parseInt(formData.id_offers),
+      id_phone: phone.id_phone,
+      id_client: parseInt(formData.id_client),
+      id_executive: parseInt(formData.id_executive),
+      id_status: parseInt(formData.id_status.toString()),
+      id_contact: selection.selectedStatus,
+      scheduled_date: formData.scheduled_date || new Date().toISOString(),
+      comment: selection.comment || '',
+    };
+
+    // ⭐ SIEMPRE CREATE, NUNCA UPDATE
+    await api.createJobContact(dataToSend);
+    
+    // ⭐ RECARGAR HISTÓRICO
+    await loadContactHistory();
+    
+    // Limpiar campos
     setPhoneSelections(prev => ({
       ...prev,
       [phoneIndex]: {
-        ...prev[phoneIndex],
-        isSaving: true
+        contacted: null,
+        selectedStatus: null,
+        comment: '',
+        isSaving: false
       }
     }));
 
-    try {
-      const dataToSend = {
-        id_offers: parseInt(formData.id_offers),
-        id_phone: phone.id_phone,
-        id_client: parseInt(formData.id_client),
-        id_executive: parseInt(formData.id_executive),
-        id_status: parseInt(formData.id_status.toString()),
-        id_contact: selection.selectedStatus,
-        scheduled_date: formData.scheduled_date || new Date().toISOString(),
-        comment: selection.comment || '',
-      };
+  } catch (error: any) {
+    console.error('Error al guardar contacto:', error);
+    setErrors({ 
+      [`phone_${phoneIndex}`]: ['Error: ' + (error.response?.data?.message || 'Error')] 
+    });
+    
+    setPhoneSelections(prev => ({
+      ...prev,
+      [phoneIndex]: { ...prev[phoneIndex], isSaving: false }
+    }));
+  }
+};
 
-      await api.createJobContact(dataToSend);
-      
-      console.log(`✅ Contacto guardado automáticamente para teléfono ${phone.phone}`);
-      
-      // Marcar como guardado exitosamente
-      setPhoneSelections(prev => ({
-        ...prev,
-        [phoneIndex]: {
-          ...prev[phoneIndex],
-          isSaving: false
-        }
-      }));
-
-    } catch (error: any) {
-      console.error('Error al guardar contacto:', error);
-      setErrors({ 
-        [`phone_${phoneIndex}`]: ['Error al guardar: ' + (error.response?.data?.message || 'Error desconocido')] 
+const loadContactHistory = async () => {
+  if (!executive?.id_client || !executive?.id_executive) return;
+  
+  try {
+    const response = await api.getJobContacts({ 
+      id_client: executive.id_client, 
+      id_executive: executive.id_executive 
+    });
+    
+    // Tu API retorna directamente un array
+    let contactsArray = Array.isArray(response) ? response : (Array.isArray(response?.data) ? response.data : []);
+    
+    console.log('Contactos cargados:', contactsArray);
+    
+    if (contactsArray.length > 0) {
+      // Ordenar por stamp (más reciente primero)
+      const sorted = contactsArray.sort((a: any, b: any) => {
+        return new Date(b.stamp).getTime() - new Date(a.stamp).getTime();
       });
-      
-      setPhoneSelections(prev => ({
-        ...prev,
-        [phoneIndex]: {
-          ...prev[phoneIndex],
-          isSaving: false
-        }
-      }));
+      setContactHistory(sorted);
+    } else {
+      setContactHistory([]);
     }
-  };
+  } catch (error) {
+    console.error('Error al cargar histórico:', error);
+    setContactHistory([]);
+  }
+};
 
   useEffect(() => {
     const loadFormData = async () => {
@@ -154,12 +184,28 @@ const ExecutiveModal = ({
         setStatusNo(StatusNoRes?.data || []);
         
         if (executive?.id_client) {
-          const phonesRes = await api.getPhonesByClient(executive.id_client);
-          const executiveListData = await api.getJobExecutive(executive.id);   
-          console.log('Datos del ejecutivo:', executiveListData.data);       
-          setExecutiveList(executiveListData.data || null);
-          setPhones(phonesRes.data.phones || []);
-        }
+            const phonesRes = await api.getPhonesByClient(executive.id_client);
+            const executiveListData = await api.getJobExecutive(executive.id);             
+            
+            setExecutiveList(executiveListData.data || null);          
+            const phonesList = phonesRes.data.phones || [];
+            setPhones(phonesList);
+            
+            // ⭐ AGREGAR: Cargar histórico
+            await loadContactHistory();
+            
+            // Inicializar phoneSelections vacío
+            const initialSelections: any = {};
+            phonesList.forEach((_, idx) => {
+              initialSelections[idx] = {
+                contacted: null,
+                selectedStatus: null,
+                comment: '',
+                isSaving: false
+              };
+            });
+            setPhoneSelections(initialSelections);
+          }
       } catch (error) {
         console.error('Error cargando datos del formulario:', error);
       }
@@ -167,11 +213,11 @@ const ExecutiveModal = ({
 
     if (isOpen) {
       loadFormData();
-      setPhoneSelections({});
     }
   }, [isOpen, executive]);
 
   useEffect(() => {
+    console.log('Cargando datos del ejecutivo en el formulario:', executive);
     if (executive) {
       setFormData({
         id_offers: executive.id_offers?.toString() || '',
@@ -201,9 +247,11 @@ const ExecutiveModal = ({
     setPhoneSelections(prev => ({
       ...prev,
       [phoneIndex]: {
+        ...prev[phoneIndex],
         contacted: value,
-        selectedStatus: null,
-        comment: ''
+        selectedStatus: prev[phoneIndex]?.selectedStatus || null,
+        comment: prev[phoneIndex]?.comment || '',
+        contactId: prev[phoneIndex]?.contactId
       }
     }));
   };
@@ -221,7 +269,7 @@ const ExecutiveModal = ({
     // Pequeño delay para que se actualice el estado antes de guardar
     setTimeout(() => {
       saveContact(phoneIndex);
-    }, 100);
+    }, 1000);
   };
 
   // ⭐ MODIFICADO: Manejar cambio de comentario CON GUARDADO AUTOMÁTICO (debounced)
@@ -235,22 +283,20 @@ const ExecutiveModal = ({
     }));
 
     // Debounce: Esperar 1 segundo después de que el usuario deje de escribir
-    if (handleCommentChange.timeout) {
-      clearTimeout(handleCommentChange.timeout);
+    if ((handleCommentChange as any).timeout) {
+      clearTimeout((handleCommentChange as any).timeout);
     }
 
-    handleCommentChange.timeout = setTimeout(() => {
+    (handleCommentChange as any).timeout = setTimeout(() => {
       if (comment.trim()) {
         saveContact(phoneIndex);
       }
-    }, 1000); // Guardar 1 segundo después de dejar de escribir
+    }, 1000);
   };
-  // Agregar propiedad estática para el timeout
-  (handleCommentChange as any).timeout = null;
 
-  // ⭐ NUEVO: Función para cerrar el modal (ya no necesita validación)
+  // ⭐ NUEVO: Función para cerrar el modal
   const handleClose = () => {
-    onSave(); // Refrescar la lista
+    onSave();
     onClose();
   };
 
@@ -263,20 +309,110 @@ const ExecutiveModal = ({
       <div className="bg-white rounded-lg w-full max-w-5xl my-8 max-h-[90vh] overflow-y-auto">
         {/* Header */}
         <div className="bg-gradient-to-r from-purple-600 to-blue-600 text-white px-6 py-4 rounded-t-lg sticky top-0 z-10">
-          <div className="flex justify-between items-center">
-            <h2 className="text-xl font-bold">
-              {executive ? 'Editar Agenda (Popup registro evento atención al cliente)' : 'Nuevo Ejecutivo'}
-            </h2>
-            <Button 
-              variant="ghost" 
-              size="sm" 
+          <div className="flex justify-between items-start">
+            <div className="flex-1">
+              <h2 className="text-lg font-bold leading-tight">
+                {executive
+                  ? `At.: Cliente ${formData.name} ${formData.last_name1} - Campaña: ${selectedOffer?.descrip || 'Seleccionar campaña'}`
+                  : 'Nuevo contacto cliente'
+                }
+              </h2>
+            </div>
+            <Button
+              variant="ghost"
+              size="sm"
               onClick={handleClose}
-              className="text-white hover:bg-white/20"
+              className="text-white hover:bg-white/20 ml-4"
             >
               <X className="h-5 w-5" />
             </Button>
           </div>
         </div>
+
+
+        {/* Section: Cliente registra gestiones */}
+        <div className="px-6 pt-4 pb-2">
+          <button
+            onClick={() => setShowHistory(!showHistory)}
+            className="text-blue-600 hover:text-blue-800 text-sm font-medium underline flex items-center gap-2"
+          >
+            Cliente registra ({contactHistory.length}) gestiones – Presione aquí para visualizar
+            {showHistory ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+          </button>
+        </div>
+
+        {/* HISTÓRICO DESPLEGABLE - Gestiones Históricas */}
+        {showHistory && (
+          <div className="px-6 pb-4">
+            <div className="border rounded-lg p-4 bg-gray-50">
+              <h3 className="font-semibold text-sm mb-3">Gestiones Históricas</h3>
+              {!contactHistory || contactHistory.length === 0 ? (
+                <p className="text-xs text-gray-500">No hay registros</p>
+              ) : (
+                <div className="space-y-3">
+                  {contactHistory.map((contact: any) => {
+                    // Format date: DD-MM-YYYY Hora: HH:MM
+                    const formatDate = (dateString: string) => {
+                      if (!dateString) return 'Sin fecha';
+                      const date = new Date(dateString);
+                      const day = String(date.getDate()).padStart(2, '0');
+                      const month = String(date.getMonth() + 1).padStart(2, '0');
+                      const year = date.getFullYear();
+                      const hours = String(date.getHours()).padStart(2, '0');
+                      const minutes = String(date.getMinutes()).padStart(2, '0');
+                      return `${day}-${month}-${year} Hora: ${hours}:${minutes}`;
+                    };
+
+                    // Get campaign name from offer
+                    const campaignName = offers.find(o => o.id_offers === contact.id_offers)?.descrip || 'N/A';
+                    // Contact status: id_status = 2 means "Contactado"
+                    const contactado = contact.id_status === 2 ? 'SI' : 'NO';
+
+                    return (
+                      <div key={contact.id} className="text-sm bg-white p-3 rounded border">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                          <div>
+                            <span className="font-semibold text-gray-700">Teléfono:</span>{' '}
+                            <span className="text-gray-900">{contact.id_phone || 'N/A'}</span>
+                          </div>
+                          <div>
+                            <span className="font-semibold text-gray-700">Campaña:</span>{' '}
+                            <span className="text-gray-900">{campaignName}</span>
+                          </div>
+                          <div>
+                            <span className="font-semibold text-gray-700">Fecha:</span>{' '}
+                            <span className="text-gray-900">{formatDate(contact.stamp)}</span>
+                          </div>
+                          <div>
+                            <span className="font-semibold text-gray-700">Contactado:</span>{' '}
+                            <span className={`font-medium ${contactado === 'SI' ? 'text-green-600' : 'text-red-600'}`}>
+                              {contactado}
+                            </span>
+                          </div>
+                          <div>
+                            <span className="font-semibold text-gray-700">Acepta / Convocado:</span>{' '}
+                            <span className="text-gray-900">{contact.id_contact || 'N/A'}</span>
+                          </div>
+                          {contact.scheduled_date && (
+                            <div>
+                              <span className="font-semibold text-gray-700">Compromiso:</span>{' '}
+                              <span className="text-gray-900">{formatDate(contact.scheduled_date)}</span>
+                            </div>
+                          )}
+                        </div>
+                        {contact.comment && (
+                          <div className="mt-2 pt-2 border-t text-gray-600 text-xs">
+                            <span className="font-semibold">Comentario:</span> {contact.comment}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         <div className="p-6">
           <div className="space-y-6">
@@ -299,102 +435,81 @@ const ExecutiveModal = ({
 
             {/* Información de Oferta */}
             {selectedOffer && attibut && executiveList && (
-              <div className="grid grid-cols-2 gap-4 text-sm">
-                <div>
-                  <Label className="text-gray-600">{attibut.attrib1 || 'Tipo Base'}</Label>
-                  <p className="font-semibold">{executiveList?.attrib1 || ''}</p>
-                </div>
-                <div>
-                  <Label className="text-gray-600">{attibut.attrib2 || 'Atributo 2'}</Label>
-                  <p className="font-semibold">{executiveList?.attrib2 || ''}</p>
-                </div>
-                <div>
-                  <Label className="text-gray-600">{attibut.attrib3 || 'Propensión'}</Label>
-                  <p className="font-semibold">{executiveList?.attrib3 || ''}</p>
-                </div>
-                <div>
-                  <Label className="text-gray-600">{attibut.attrib4 || 'Atributo 4'}</Label>
-                  <p className="font-semibold">{executiveList?.attrib4 || ''}</p>
-                </div>
-                <div>
-                  <Label className="text-gray-600">{attibut.attrib5 || 'Fecha Vencto TC'}</Label>
-                  <p className="font-semibold">{executiveList?.attrib5 || ''}</p>
-                </div>
-                <div>
-                  <Label className="text-gray-600">{attibut.attrib6 || 'Actividad TC'}</Label>
-                  <p className="font-semibold">{executiveList?.attrib6 || ''}</p>
-                </div>
-                <div>
-                  <Label className="text-gray-600">{attibut.attrib7 || 'Atributo 7'}</Label>
-                  <p className="font-semibold">{executiveList?.attrib7 || ''}</p>
-                </div>
-                <div>
-                  <Label className="text-gray-600">{attibut.attrib8 || 'Atributo 8'}</Label>
-                  <p className="font-semibold">{executiveList?.attrib8 || ''}</p>
-                </div>
-                <div>
-                  <Label className="text-gray-600">{attibut.attrib9 || 'Cuotas Pagadas REF'}</Label>
-                  <p className="font-semibold">{executiveList?.attrib9 || ''}</p>
-                </div>
-                <div>
-                  <Label className="text-gray-600">{attibut.attrib10 || 'Plazo'}</Label>
-                  <p className="font-semibold">{executiveList?.attrib10 || ''}</p>
-                </div>
-                <div>
-                  <Label className="text-gray-600">{attibut.attrib11 || 'Saldo TCV'}</Label>
-                  <p className="font-semibold">{executiveList?.attrib11 || ''}</p>
-                </div>
-                <div>
-                  <Label className="text-gray-600">{attibut.attrib12 || 'Atributo 12'}</Label>
-                  <p className="font-semibold">{executiveList?.attrib12 || ''}</p>
-                </div>
-                <div>
-                  <Label className="text-gray-600">{attibut.attrib13 || 'Atributo 13'}</Label>
-                  <p className="font-semibold">{executiveList?.attrib13 || ''}</p>
-                </div>
-                <div>
-                  <Label className="text-gray-600">{attibut.attrib14 || 'Atributo 14'}</Label>
-                  <p className="font-semibold">{executiveList?.attrib14 || ''}</p>
-                </div>
-                <div>
-                  <Label className="text-gray-600">{attibut.attrib15 || 'Oferta'}</Label>
-                  <p className="font-semibold">{executiveList?.attrib15 || ''}</p>
-                </div>
-                <div>
-                  <Label className="text-gray-600">{attibut.attrib16 || 'Atributo 16'}</Label>
-                  <p className="font-semibold">{executiveList?.attrib16 || ''}</p>
-                </div>
-                <div>
-                  <Label className="text-gray-600">{attibut.attrib17 || 'Atributo 17'}</Label>
-                  <p className="font-semibold">{executiveList?.attrib17 || ''}</p>
-                </div>
-                <div>
-                  <Label className="text-gray-600">{attibut.attrib18 || 'Atributo 18'}</Label>
-                  <p className="font-semibold">{executiveList?.attrib18 || ''}</p>
-                </div>
-                <div>
-                  <Label className="text-gray-600">{attibut.attrib19 || 'Atributo 19'}</Label>
-                  <p className="font-semibold">{executiveList?.attrib19 || ''}</p>
-                </div>
-                <div>
-                  <Label className="text-gray-600">{attibut.attrib20 || 'Atributo 20'}</Label>
-                  <p className="font-semibold">{executiveList?.attrib20 || ''}</p>
-                </div>
-                <div>
-                  <Label className="text-gray-600">{attibut.attrib21 || 'Atributo 21'}</Label>
-                  <p className="font-semibold">{executiveList?.attrib21 || ''}</p>
-                </div>
-                <div>
-                  <Label className="text-gray-600">{attibut.attrib22 || 'Atributo 22'}</Label>
-                  <p className="font-semibold">{executiveList?.attrib22 || ''}</p>
-                </div>
-              </div>
-            )}
+  <div className="space-y-4">
+    {/* Fila 1: attrib1, attrib2, attrib3 */}
+    <div className="flex items-center space-x-2 text-sm flex-wrap">
+      <span className="text-gray-600">{attibut.attrib1 || 'Tipo Base'}: <span className="font-semibold">{executiveList?.attrib1 || ''}</span></span>
+      <span className="text-gray-400">/</span>
+      <span className="text-gray-600">{attibut.attrib2 || 'Atributo 2'}: <span className="font-semibold">{executiveList?.attrib2 || ''}</span></span>
+      <span className="text-gray-400">/</span>
+      <span className="text-gray-600">{attibut.attrib3 || 'Propensión'}: <span className="font-semibold">{executiveList?.attrib3 || ''}</span></span>
+    </div>
 
-            {/* Teléfonos Disponibles */}
+    {/* Fila 2: attrib4, attrib5, attrib6 */}
+    <div className="flex items-center space-x-2 text-sm flex-wrap">
+      <span className="text-gray-600">{attibut.attrib4 || 'Atributo 4'}: <span className="font-semibold">{executiveList?.attrib4 || ''}</span></span>
+      <span className="text-gray-400">/</span>
+      <span className="text-gray-600">{attibut.attrib5 || 'Fecha Vencto TC'}: <span className="font-semibold">{executiveList?.attrib5 || ''}</span></span>
+      <span className="text-gray-400">/</span>
+      <span className="text-gray-600">{attibut.attrib6 || 'Actividad TC'}: <span className="font-semibold">{executiveList?.attrib6 || ''}</span></span>
+    </div>
+
+    {/* Fila 3: attrib7, attrib8, attrib9 */}
+    <div className="flex items-center space-x-2 text-sm flex-wrap">
+      <span className="text-gray-600">{attibut.attrib7 || 'Atributo 7'}: <span className="font-semibold">{executiveList?.attrib7 || ''}</span></span>
+      <span className="text-gray-400">/</span>
+      <span className="text-gray-600">{attibut.attrib8 || 'Atributo 8'}: <span className="font-semibold">{executiveList?.attrib8 || ''}</span></span>
+      <span className="text-gray-400">/</span>
+      <span className="text-gray-600">{attibut.attrib9 || 'Cuotas Pagadas REF'}: <span className="font-semibold">{executiveList?.attrib9 || ''}</span></span>
+    </div>
+
+    {/* Fila 4: attrib10, attrib11, attrib12 */}
+    <div className="flex items-center space-x-2 text-sm flex-wrap">
+      <span className="text-gray-600">{attibut.attrib10 || 'Plazo'}: <span className="font-semibold">{executiveList?.attrib10 || ''}</span></span>
+      <span className="text-gray-400">/</span>
+      <span className="text-gray-600">{attibut.attrib11 || 'Saldo TCV'}: <span className="font-semibold">{executiveList?.attrib11 || ''}</span></span>
+      <span className="text-gray-400">/</span>
+      <span className="text-gray-600">{attibut.attrib12 || 'Atributo 12'}: <span className="font-semibold">{executiveList?.attrib12 || ''}</span></span>
+    </div>
+
+    {/* Fila 5: attrib13, attrib14, attrib15 */}
+    <div className="flex items-center space-x-2 text-sm flex-wrap">
+      <span className="text-gray-600">{attibut.attrib13 || 'Atributo 13'}: <span className="font-semibold">{executiveList?.attrib13 || ''}</span></span>
+      <span className="text-gray-400">/</span>
+      <span className="text-gray-600">{attibut.attrib14 || 'Atributo 14'}: <span className="font-semibold">{executiveList?.attrib14 || ''}</span></span>
+      <span className="text-gray-400">/</span>
+      <span className="text-gray-600">{attibut.attrib15 || 'Oferta'}: <span className="font-semibold">{executiveList?.attrib15 || ''}</span></span>
+    </div>
+
+    {/* Fila 6: attrib16, attrib17, attrib18 */}
+    <div className="flex items-center space-x-2 text-sm flex-wrap">
+      <span className="text-gray-600">{attibut.attrib16 || 'Atributo 16'}: <span className="font-semibold">{executiveList?.attrib16 || ''}</span></span>
+      <span className="text-gray-400">/</span>
+      <span className="text-gray-600">{attibut.attrib17 || 'Atributo 17'}: <span className="font-semibold">{executiveList?.attrib17 || ''}</span></span>
+      <span className="text-gray-400">/</span>
+      <span className="text-gray-600">{attibut.attrib18 || 'Atributo 18'}: <span className="font-semibold">{executiveList?.attrib18 || ''}</span></span>
+    </div>
+
+    {/* Fila 7: attrib19, attrib20, attrib21 */}
+    <div className="flex items-center space-x-2 text-sm flex-wrap">
+      <span className="text-gray-600">{attibut.attrib19 || 'Atributo 19'}: <span className="font-semibold">{executiveList?.attrib19 || ''}</span></span>
+      <span className="text-gray-400">/</span>
+      <span className="text-gray-600">{attibut.attrib20 || 'Atributo 20'}: <span className="font-semibold">{executiveList?.attrib20 || ''}</span></span>
+      <span className="text-gray-400">/</span>
+      <span className="text-gray-600">{attibut.attrib21 || 'Atributo 21'}: <span className="font-semibold">{executiveList?.attrib21 || ''}</span></span>
+    </div>
+
+    {/* Fila 8: attrib22 */}
+    <div className="flex items-center space-x-2 text-sm flex-wrap">
+      <span className="text-gray-600">{attibut.attrib22 || 'Atributo 22'}: <span className="font-semibold">{executiveList?.attrib22 || ''}</span></span>
+    </div>
+  </div>
+)}
+
+            {/* Teléfonos Disponibles - Puntos de Contacto */}
             <div className="border rounded-lg overflow-hidden">
               <div className="bg-blue-100 px-4 py-2 flex justify-between items-center">
-                <h3 className="font-semibold text-sm">Teléfonos disponibles</h3>
+                <h3 className="font-semibold text-sm">Puntos de contacto disponibles</h3>
                 <span className="text-xs text-blue-600 font-medium">
                   💾 Guardado automático activado
                 </span>
@@ -416,8 +531,8 @@ const ExecutiveModal = ({
                     {phones.length > 0 ? (
                       phones.map((phone, idx) => {
                         const selection = phoneSelections[idx];
-                        const showStatusYes = selection?.contacted === 'yes';
-                        const showStatusNo = selection?.contacted === 'no';
+                        const showStatusYes = selection?.contacted === '1';
+                        const showStatusNo = selection?.contacted === '0';
 
                         return (
                           <tr key={idx} className="border-b hover:bg-gray-50">
@@ -434,8 +549,8 @@ const ExecutiveModal = ({
                                   <input
                                     type="radio"
                                     name={`contact-${idx}`}
-                                    checked={selection?.contacted === 'yes'}
-                                    onChange={() => handleContactChange(idx, 'yes')}
+                                    checked={selection?.contacted === '1'}
+                                    onChange={() => handleContactChange(idx, '1')}
                                     className="w-4 h-4 text-green-600"
                                   />
                                   <span className="text-green-600 font-medium">Sí</span>
@@ -445,8 +560,8 @@ const ExecutiveModal = ({
                                   <input
                                     type="radio"
                                     name={`contact-${idx}`}
-                                    checked={selection?.contacted === 'no'}
-                                    onChange={() => handleContactChange(idx, 'no')}
+                                    checked={selection?.contacted === '0'}
+                                    onChange={() => handleContactChange(idx, '0')}
                                     className="w-4 h-4 text-red-600"
                                   />
                                   <span className="text-red-600 font-medium">No</span>
@@ -482,7 +597,6 @@ const ExecutiveModal = ({
                                         </option>
                                       ))}
                                     </select>
-                                    {/* ⭐ Indicador de guardado en el select */}
                                     {selection.isSaving && (
                                       <div className="absolute right-2 top-1/2 -translate-y-1/2">
                                         <div className="animate-spin h-3 w-3 border-2 border-blue-600 border-t-transparent rounded-full"></div>
@@ -505,7 +619,6 @@ const ExecutiveModal = ({
                                               : 'border-yellow-300 bg-yellow-50 focus:border-yellow-500'
                                           }`}
                                         />
-                                        {/* ⭐ Indicador de guardado en el comentario */}
                                         {selection.isSaving && (
                                           <div className="absolute right-2 top-2">
                                             <div className="animate-spin h-3 w-3 border-2 border-blue-600 border-t-transparent rounded-full"></div>
@@ -536,7 +649,6 @@ const ExecutiveModal = ({
                                 </div>
                               )}
 
-                              {/* ⭐ Mostrar error si existe */}
                               {errors[`phone_${idx}`] && (
                                 <div className="text-xs text-red-600 mt-1">
                                   {errors[`phone_${idx}`][0]}
@@ -549,7 +661,7 @@ const ExecutiveModal = ({
                     ) : (
                       <tr>
                         <td colSpan={7} className="px-3 py-4 text-center text-gray-500">
-                          No hay teléfonos disponibles
+                          Sin contactos disponibles
                         </td>
                       </tr>
                     )}
@@ -566,16 +678,16 @@ const ExecutiveModal = ({
                       if (!selection.contacted) return null;
                       
                       const phone = phones[parseInt(index)];
-                      const statusList = selection.contacted === 'yes' ? statusYes : StatusNo;
+                      const statusList = selection.contacted === '1' ? statusYes : StatusNo;
                       const selectedStatusObj = statusList?.find((s: any) => s.id_contact === selection.selectedStatus);
-                      const isIncomplete = !selection.selectedStatus || (selection.contacted === 'yes' && !selection.comment?.trim());
+                      const isIncomplete = !selection.selectedStatus || (selection.contacted === '1' && !selection.comment?.trim());
                       
                       return (
                         <div key={index} className={`text-xs flex items-center flex-wrap gap-2 ${isIncomplete ? 'bg-yellow-50 p-2 rounded border border-yellow-200' : 'bg-green-50 p-2 rounded border border-green-200'}`}>
                           <span className="font-mono bg-white px-2 py-1 rounded border">{phone?.phone}</span>
                           <span>→</span>
-                          <span className={`px-2 py-1 rounded ${selection.contacted === 'yes' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                            {selection.contacted === 'yes' ? '✓ Contactado' : '✗ No contactado'}
+                          <span className={`px-2 py-1 rounded ${selection.contacted === '1' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                            {selection.contacted === '1' ? '✓ Contactado' : '✗ No contactado'}
                           </span>
                           {selectedStatusObj ? (
                             <>
@@ -588,11 +700,11 @@ const ExecutiveModal = ({
                             <>
                               <span>→</span>
                               <span className="text-yellow-700 font-semibold px-2 py-1 rounded bg-yellow-100">
-                                ⚠️ Falta seleccionar {selection.contacted === 'yes' ? 'acción' : 'motivo'}
+                                ⚠️ Falta seleccionar {selection.contacted === '1' ? 'acción' : 'motivo'}
                               </span>
                             </>
                           )}
-                          {selection.contacted === 'yes' && (
+                          {selection.contacted === '1' && (
                             selection.comment?.trim() ? (
                               <>
                                 <span>→</span>
@@ -609,7 +721,6 @@ const ExecutiveModal = ({
                               </>
                             )
                           )}
-                          {/* ⭐ Indicador de guardado en resumen */}
                           {selection.isSaving && (
                             <>
                               <span>→</span>
@@ -657,9 +768,11 @@ const ExecutiveModal = ({
     </div>
   );
 };
+
+
 const StatusBadge = ({ status }: { status?: JobClientStatus }) => {
   if (!status) return null;
-  
+
   return (
     <span className={`px-2 py-1 text-xs font-medium rounded-full ${
       status.is_life ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
@@ -669,15 +782,25 @@ const StatusBadge = ({ status }: { status?: JobClientStatus }) => {
   );
 };
 
-const ExecutiveActions = ({ 
-  executive, 
-  onEdit, 
-  onDelete,
+const ContactStatusBadge = ({ isContacted }: { isContacted?: boolean }) => {
+  if (isContacted === undefined) return null;
+
+  return (
+    <span className={`px-2 py-1 text-xs font-medium rounded-full ${
+      isContacted ? 'bg-blue-100 text-blue-800' : 'bg-orange-100 text-orange-800'
+    }`}>
+      {isContacted ? 'Contactado' : 'No contactado'}
+    </span>
+  );
+};
+
+const ExecutiveActions = ({
+  executive,
+  onEdit,
   onSchedule
-}: { 
-  executive: JobDayExecutive; 
-  onEdit: () => void; 
-  onDelete: () => void;
+}: {
+  executive: JobDayExecutive;
+  onEdit: () => void;
   onSchedule: () => void;
 }) => {
   const [showMenu, setShowMenu] = useState(false);
@@ -691,34 +814,23 @@ const ExecutiveActions = ({
       >
         <MoreHorizontal className="h-4 w-4" />
       </Button>
-      
+
       {showMenu && (
         <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg border z-10">
           <div className="py-1">
-            <button className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
-              <Eye className="mr-2 h-4 w-4" />
-              Ver Detalles
-            </button>
-            <button 
+            <button
               onClick={onEdit}
               className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
             >
               <Edit className="mr-2 h-4 w-4" />
               Editar
             </button>
-            <button 
+            <button
               onClick={onSchedule}
               className="flex items-center w-full px-4 py-2 text-sm text-blue-700 hover:bg-gray-100"
             >
               <Calendar className="mr-2 h-4 w-4" />
               Agendar
-            </button>
-            <button 
-              onClick={onDelete}
-              className="flex items-center w-full px-4 py-2 text-sm text-red-700 hover:bg-gray-100"
-            >
-              <Trash2 className="mr-2 h-4 w-4" />
-              Eliminar
             </button>
           </div>
         </div>
@@ -743,7 +855,26 @@ export default function JobExecutivesPage() {
   const [itemsPerPage, setItemsPerPage] = useState(10);
   const [fetchingSummary, setFetchingSummary] = useState<summaryQueryParams>({} as summaryQueryParams);
   const { user } = useAuth();
-  
+  const { selectedOffer, setSelectedOffer } = useOfferStore();
+const [showNewClientModal, setShowNewClientModal] = useState(false);
+const [campaignFromStorage, setCampaignFromStorage] = useState<string | null>(null);
+
+  useEffect(() => {
+  if (selectedOffer?.id_offers) {
+    const offerId = selectedOffer.id_offers.toString();
+    setOfferFilter(offerId);
+    console.log('✅ Campaña preseleccionada desde localStorage:', selectedOffer.descrip);
+  }
+}, [selectedOffer]);
+
+  useEffect(() => {
+  if (selectedOffer?.id_offers) {
+    const offerIdCampaning = selectedOffer.id_offers.toString();
+    setCampaignFromStorage(offerIdCampaning);
+    console.log('✅ Campaña preseleccionada desde localStorage:', selectedOffer.descrip);
+  }
+}, [selectedOffer]);
+
 
   const fetchExecutives = async () => {
     try {
@@ -754,11 +885,21 @@ export default function JobExecutivesPage() {
         per_page: itemsPerPage,
         id_executive: user?.id_executive || undefined,
       };
-      
+      console.log('Fetch Params:', params);
       if (offerFilter !== 'all') params.id_offers = offerFilter;
-      if (statusFilter !== 'all') params.id_status = statusFilter;
+
+      // Filtro por estado de contacto
+      if (statusFilter === 'contacted') {
+        params.is_contacted = true;
+      } else if (statusFilter === 'not_contacted') {
+        params.is_contacted = false;
+      } else if (statusFilter !== 'all') {
+        params.id_status = statusFilter;
+      }
+
       if (officeFilter !== 'all') params.id_office = officeFilter;
-      
+      if (searchQuery.trim()) params.search = searchQuery.trim();
+
       const response = await api.getJobExecutives(params);
       setExecutives(response.data || []);
       setPaginationTotal(response.pagination?.total || 0);
@@ -790,7 +931,7 @@ export default function JobExecutivesPage() {
 
   useEffect(() => {
     fetchExecutives();
-  }, [offerFilter, statusFilter, officeFilter, currentPage, itemsPerPage]);
+  }, [searchQuery, offerFilter, statusFilter, officeFilter, currentPage, itemsPerPage]);
 
   useEffect(() => {
     fetchFilters();
@@ -828,6 +969,7 @@ export default function JobExecutivesPage() {
     return matchesSearch;
   });
 
+  console.log('Filtered Executives:', filteredExecutives);
   const paginatedExecutives = filteredExecutives;
   const totalItems = paginationTotal;  
   const totalPages = Math.ceil(totalItems / itemsPerPage);
@@ -870,16 +1012,24 @@ export default function JobExecutivesPage() {
           <p className="text-gray-600 mt-1">Gestiona las relaciones con tus prospectos</p>
         </div>
         <Button 
-          onClick={() => {
-            setSelectedExecutive(null);
-            setShowModal(true);
-          }}
+          onClick={() => setShowNewClientModal(true)}
+
           className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 mt-4 sm:mt-0"
         >
           <Plus className="w-4 h-4 mr-2" />
-          Nuevo Ejecutivo
+          Nuevo Cliente
         </Button>
       </div>
+
+      <NewClientModal
+  isOpen={showNewClientModal}
+  onClose={() => setShowNewClientModal(false)}
+  onSave={() => {
+    // Aquí recargas la lista de ejecutivos después de guardar
+    fetchExecutives();
+  }}
+  campaignId={campaignFromStorage || undefined}
+/>
 
       {/* Estadísticas */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
@@ -904,7 +1054,7 @@ export default function JobExecutivesPage() {
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-muted-foreground">{fetchingSummary.summary_2?.title || "Clientes Sin acciones"}</p>
+                <p className="text-sm font-medium text-muted-foreground">{fetchingSummary.summary_2?.title || "No contactado"}</p>
                 <p className="text-2xl font-bold">
                   {fetchingSummary.summary_2?.maskAmount || 0}
                 </p>
@@ -966,7 +1116,7 @@ export default function JobExecutivesPage() {
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
                 <Input
                   id="search"
-                  placeholder="Buscar ejecutivos..."
+                  placeholder="Buscar cliente..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="pl-10"
@@ -1000,11 +1150,8 @@ export default function JobExecutivesPage() {
                 className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm"
               >
                 <option value="all">Todos los Estados</option>
-                {statuses && statuses.length > 0 && statuses.map(status => (
-                  <option key={status.id_status} value={status.id_status}>
-                    {status.descrip}
-                  </option>
-                ))}
+                <option value="contacted">Contactado</option>
+                <option value="not_contacted">No contactado</option>
               </select>
             </div>
 
@@ -1036,9 +1183,9 @@ export default function JobExecutivesPage() {
       {/* Lista de Ejecutivos */}
       <Card>
         <CardHeader>
-          <CardTitle>Ejecutivos ({totalItems})</CardTitle>
+          <CardTitle>Clientes ({totalItems})</CardTitle>
           <CardDescription>
-            Mostrando {startIndex + 1} a {Math.min(endIndex, totalItems)} de {totalItems} ejecutivos
+            Mostrando {startIndex + 1} a {Math.min(endIndex, totalItems)} de {totalItems} clientes
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -1065,7 +1212,7 @@ export default function JobExecutivesPage() {
                           {executive.name} {executive.last_name1} {executive.last_name2}
                         </h3>
                         <div className="flex items-center space-x-4 text-sm text-gray-600">
-                          <span>RUT: {executive.id_executive}-{executive.dv_executive}</span>
+                          <span>RUT: {formatRUT(executive.id_client, executive.dv_client)}</span>
                           {executive.id_office && (
                             <>
                               <span>•</span>
@@ -1075,18 +1222,25 @@ export default function JobExecutivesPage() {
                               </div>
                             </>
                           )}
-                          {executive.attrib1 && (
-                            <>
-                              <span>•</span>
-                              <div className="flex items-center">
-                                <Phone className="w-3 h-3 mr-1" />
-                                {executive.attrib1}
-                              </div>
-                            </>
-                          )}
+                          {executive.contacts_phone && executive.contacts_phone.length > 0 && (
+                              <>
+                                <span>•</span>
+                                <div className="flex items-center">
+                                  <Phone className="w-3 h-3 mr-1" />
+                                  {executive.contacts_phone
+                                  .slice(0, 3)
+                                  .map(contact => contact.phone)
+                                  .join(' / ')}
+                                </div>
+                              </>
+                            )}
                         </div>
                         <div className="flex items-center space-x-2 mt-1">
-                          <StatusBadge status={executive.status} />
+                          {executive.is_contacted !== undefined && executive.is_contacted ? (
+                            <ContactStatusBadge isContacted={true} />
+                          ) : (
+                            <ContactStatusBadge isContacted={false} />
+                          )}
                           {executive.scheduled_date && (
                             <span className="flex items-center text-xs text-blue-600">
                               <Clock className="w-3 h-3 mr-1" />
@@ -1107,7 +1261,7 @@ export default function JobExecutivesPage() {
 
                       <div className="text-center">
                         <div className="text-lg font-semibold text-gray-900">
-                          $ {executive.attrib9 || 0}
+                          {formatCLP(executive.attrib9)}
                         </div>
                         <div className="text-xs text-gray-600">Total gastado</div>
                       </div>
@@ -1118,7 +1272,6 @@ export default function JobExecutivesPage() {
                           setSelectedExecutive(executive);
                           setShowModal(true);
                         }}
-                        onDelete={() => handleDelete(executive)}
                         onSchedule={() => handleSchedule(executive)}
                       />
                     </div>
@@ -1128,11 +1281,11 @@ export default function JobExecutivesPage() {
                 {paginatedExecutives.length === 0 && !loading && (
                   <div className="text-center py-12">
                     <Users className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                    <h3 className="text-lg font-medium text-gray-900 mb-2">No se encontraron ejecutivos</h3>
+                    <h3 className="text-lg font-medium text-gray-900 mb-2">No se encontraron clientes</h3>
                     <p className="text-gray-600 mb-4">Intenta ajustar tus filtros de búsqueda</p>
                     <Button onClick={() => setShowModal(true)}>
                       <Plus className="w-4 h-4 mr-2" />
-                      Agregar Nuevo Ejecutivo
+                      Agregar cliente
                     </Button>
                   </div>
                 )}

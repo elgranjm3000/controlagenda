@@ -20,7 +20,7 @@ import {
   UserPlus,
   X,
 } from 'lucide-react';
-import { formatCurrency, formatDate } from '@/lib/utils';
+import { formatCurrency, formatDate, formatCLP } from '@/lib/utils';
 import { api } from '@/lib/api';
 import { Client } from '@/types';
 
@@ -359,7 +359,7 @@ export default function ClientsPage() {
               <div>
                 <p className="text-sm font-medium text-muted-foreground">Promedio Gastado</p>
                 <p className="text-2xl font-bold">
-                  {formatCurrency(45000)}
+                  {formatCLP(45000)}
                 </p>
                 <div className="flex items-center text-sm text-green-600">
                   <span>+12% vs mes pasado</span>
@@ -485,7 +485,7 @@ export default function ClientsPage() {
 
                     <div className="text-center">
                       <div className="text-lg font-semibold text-gray-900">
-                        {formatCurrency(Math.random() * 100000)}
+                        {formatCLP(Math.random() * 100000)}
                       </div>
                       <div className="text-xs text-gray-600">Total Gastado</div>
                     </div>

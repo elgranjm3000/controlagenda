@@ -11,10 +11,24 @@ export function useAuth() {
 
   useEffect(() => {
     const initAuth = async () => {
+      console.log(pathname);
       try {
-        // IMPORTANTE: No restaurar sesión si estamos en la página de AutoLogin
-        if (pathname === '/autoLogin') {
+        // ✅ CRÍTICO: No restaurar sesión si estamos en AutoLogin
+        if (pathname === '/autoLogin/') {
           console.log('🔄 En AutoLogin, omitiendo restauración de sesión');
+          
+          // ✅ SUPER CRÍTICO: Limpiar sesión si hay un token diferente en la URL
+          const urlParams = new URLSearchParams(window.location.search);
+          const currentToken = urlParams.get('token');
+          const lastToken = sessionStorage.getItem('last_autologin_token');
+          
+          if (currentToken && lastToken && currentToken !== lastToken) {
+            console.log('🔥 Token diferente detectado en URL, limpiando sesión');
+            authSessionService.clearSession();
+            authStore.clearAuth();
+            sessionStorage.clear();
+          }
+          
           authStore.setLoading(false);
           return;
         }
@@ -23,7 +37,7 @@ export function useAuth() {
         const token = authSessionService.getToken();
         const email = authSessionService.getCurrentEmail();
         const userStr = localStorage.getItem('user');
-        console.log(email ? '🔄 Restaurando sesión para: ' + email : '🔍 No hay sesión guardada');
+        
 
         // Verificar que existan todos los datos necesarios
         if (token && email && userStr) {
@@ -60,7 +74,7 @@ export function useAuth() {
     };
 
     initAuth();
-  }, [pathname]); // Agregar pathname como dependencia
+  }, [pathname]);
 
   const login = async (credentials: { email: string; password: string }) => {
     try {
@@ -148,9 +162,6 @@ export function useAuth() {
         return { success: false };
       }
 
-      // Aquí podrías hacer una llamada al servidor para validar/refrescar el token
-      // const newToken = await authApi.refreshToken(session.token);
-      
       console.log('🔄 Sesión refrescada');
       return { success: true };
     } catch (error) {

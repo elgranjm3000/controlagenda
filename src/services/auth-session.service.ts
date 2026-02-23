@@ -16,6 +16,49 @@ class AuthSessionService {
   };
 
   /**
+   * ✅ NUEVO: Debug de sesión actual
+   */
+  debugSession(): void {
+    console.log('🔍 DEBUG SESIÓN ACTUAL:');
+    console.log('   Token:', this.getToken()?.substring(0, 20) + '...' || 'NONE');
+    console.log('   Email:', this.getCurrentEmail() || 'NONE');
+    console.log('   Has User:', !!localStorage.getItem(this.STORAGE_KEYS.USER));
+    
+    const session = this.getCurrentSession();
+    if (session) {
+      const age = Date.now() - session.timestamp;
+      console.log('   Session Age:', Math.round(age / 1000), 'segundos');
+    }
+  }
+
+  /**
+   * ✅ NUEVO: Limpieza forzada de TODOS los datos
+   */
+  forceCleanAll(): void {
+    console.log('🧹🔥 LIMPIEZA FORZADA - Eliminando TODO...');
+    
+    // Obtener todas las claves del localStorage
+    const allKeys = Object.keys(localStorage);
+    
+    // Eliminar todo lo relacionado con auth
+    allKeys.forEach(key => {
+      if (
+        key.includes('auth') ||
+        key.includes('user') ||
+        key.includes('token') ||
+        key.includes('session') ||
+        key.includes('remember') ||
+        key.includes('last_')
+      ) {
+        console.log('   Eliminando:', key);
+        localStorage.removeItem(key);
+      }
+    });
+    
+    console.log('✅ Limpieza forzada completada');
+  }
+
+  /**
    * Verificar si hay una sesión activa y si coincide con el email proporcionado
    */
   verifySession(email: string): {
@@ -48,11 +91,13 @@ class AuthSessionService {
     const keysToRemove = [
       'remember_me',
       'last_activity',
-      'session_id'
+      'session_id',
+      'last_autologin_token'
     ];
 
     keysToRemove.forEach(key => {
       localStorage.removeItem(key);
+      sessionStorage.removeItem(key);
     });
 
     console.log('✅ Sesión limpiada');

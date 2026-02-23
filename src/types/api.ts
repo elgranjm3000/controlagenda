@@ -248,6 +248,7 @@ export interface JobDayExecutive {
   contactStatus?: JobClientStatusContact;
   contacts?: JobDayContact[];
   contacts_count?: number;
+  is_contacted?: boolean;
 }
 
 export interface CreateJobExecutiveRequest {
@@ -691,6 +692,7 @@ export interface JobExecutiveQueryParams {
   sort_order?: 'asc' | 'desc';
   per_page?: number;
   page?: number;
+  contacts_phone?: any;
 }
 
 export interface JobContactQueryParams {

@@ -1,7 +1,7 @@
 'use client';
 
 import { useAuth } from '@/hooks/use-auth';
-import { useRouter } from 'next/navigation';
+import { useRouter,usePathname } from 'next/navigation';
 import { useEffect } from 'react';
 
 export default function AuthLayout({
@@ -11,12 +11,23 @@ export default function AuthLayout({
 }) {
   const { isAuthenticated, isLoading } = useAuth();
   const router = useRouter();
+  const pathname = usePathname();
 
   useEffect(() => {
+
+    if (pathname === '/autoLogin') {
+      console.log('🔄 En AutoLogin, no verificar autenticación');
+      return;
+    }
+
     if (!isLoading && isAuthenticated) {
       router.push('/dashboard');
     }
-  }, [isAuthenticated, isLoading, router]);
+  }, [isAuthenticated, isLoading, router, pathname]);
+
+   if (pathname === '/autoLogin') {
+    return <>{children}</>;
+  }
 
   if (isLoading) {
     return (

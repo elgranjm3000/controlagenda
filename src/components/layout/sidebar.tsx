@@ -1,43 +1,34 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/use-auth';
+import { useOfferStore } from '@/store/useOfferStore';
 import {
-  Calendar,
-  Users,
-  Briefcase,
-  CreditCard,
-  BarChart3,
-  Settings,
-  Building2,
-  UserCog,
   Home,
   LogOut,
   Menu,
   X,
   ChevronDown,
+  Users,
 } from 'lucide-react';
+import { api } from '@/types/services';
+import { JobOffer } from '@/types';
 
 const navigationItems = [
   { name: 'Panel Principal', href: '/dashboard', icon: Home, roles: ['owner', 'manager', 'staff', 'viewer'] },
-  //{ name: 'Citas', href: '/appointments', icon: Calendar, roles: ['owner', 'manager', 'staff'] },
-  //{ name: 'Clientes', href: '/clients', icon: Users, roles: ['owner', 'manager', 'staff'] },
   { name: 'Clientes', href: '/job-executives', icon: Users, roles: ['owner', 'manager', 'staff'] },
-  //{ name: 'Servicios', href: '/services', icon: Briefcase, roles: ['owner', 'manager', 'staff'] },
-  //{ name: 'Pagos', href: '/payments', icon: CreditCard, roles: ['owner', 'manager', 'staff'] },
-  //{ name: 'Reportes', href: '/reports', icon: BarChart3, roles: ['owner', 'manager'] },
-  //{ name: 'Usuarios', href: '/users', icon: UserCog, roles: ['owner', 'manager'] },
-  //{ name: 'Empresa', href: '/company', icon: Building2, roles: ['owner', 'manager'] },
 ];
 
 export function Sidebar() {
   const pathname = usePathname();
   const { user, logout } = useAuth();
+  const { selectedOffer, setSelectedOffer } = useOfferStore();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const [offeers, setOffer] = useState<JobOffer[]>([]);
 
   const filteredNavigation = navigationItems.filter(item => 
     user && item.roles.includes(user.role)
@@ -47,21 +38,33 @@ export function Sidebar() {
     setMobileMenuOpen(false);
   };
 
+  const handleSelectOffer = (offer: JobOffer) => {
+    setSelectedOffer(offer);
+    setUserMenuOpen(false);
+    console.log('Oferta guardada en localStorage:', offer);
+    alert(`Oferta seleccionada: ${offer.descrip}`);
+  };
+
+  useEffect(() => {
+    const fetchJobOffers = async () => {
+      try {
+        const response = await api.getJobOffers({ active: true });
+        setOffer(response.data);
+      } catch (error) {
+        console.error('Error fetching job offers:', error);
+      }
+    };
+
+    fetchJobOffers();
+  }, []);
+  
+
   return (
     <>
       <div className="bg-white border-b border-gray-200">
         <div className="flex items-center justify-between px-4 sm:px-6 lg:px-8 py-4">
-          {/* Logo */}
-          {/* <div className="flex items-center space-x-2">
-            <div className="w-8 h-8 bg-gradient-to-r from-purple-600 to-blue-600 rounded-lg flex items-center justify-center">
-              <Calendar className="w-5 h-5 text-white" />
-            </div>
-            <span className="text-lg sm:text-xl font-bold bg-gradient-to-r from-purple-600 to-blue-600 bg-clip-text text-transparent">
-              AgendaChile
-            </span>
-          </div> */}
 
-          {/* Navegación Desktop - Horizontal */}
+          {/* Navegación Desktop */}
           <nav className="hidden lg:flex items-center space-x-1">
             {filteredNavigation.map((item) => {
               const isActive = pathname === item.href || pathname.startsWith(item.href + '/');
@@ -123,14 +126,27 @@ export function Sidebar() {
                   />
                   <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 z-20">
                     <div className="py-1">
-                      {/*<Link
-                        href="/settings"
-                        className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                        onClick={() => setUserMenuOpen(false)}
-                      >
-                        <Settings className="mr-2 h-4 w-4" />
-                        Configuración
-                      </Link>*/}
+                      {offeers.length > 0 && (
+                        <div className="border-t border-gray-200 my-1" />
+                      )}
+
+                      {offeers.map(offer => (
+                        <button
+                          key={offer.id}
+                          onClick={() => handleSelectOffer(offer)}
+                          className={cn(
+                            "flex items-center w-full px-4 py-2 text-sm transition-colors",
+                            selectedOffer?.id === offer.id
+                              ? 'bg-purple-50 text-purple-700 font-medium'
+                              : 'text-gray-700 hover:bg-gray-50'
+                          )}>
+                          <Home className="mr-2 h-4 w-4" />
+                          {offer.descrip}
+                        </button>                         
+                      ))}
+                      
+                      <div className="border-t border-gray-200 my-1" />
+                      
                       <button
                         onClick={() => {
                           setUserMenuOpen(false);
@@ -162,28 +178,17 @@ export function Sidebar() {
         </div>
       </div>
 
-      {/* Menú Móvil Overlay */}
+      {/* Menú Móvil */}
       {mobileMenuOpen && (
         <>
-          {/* Backdrop oscuro */}
           <div 
             className="fixed inset-0 bg-black bg-opacity-50 z-40 lg:hidden"
             onClick={handleMobileMenuClose}
           />
           
-          {/* Panel lateral móvil */}
           <div className="fixed top-0 right-0 bottom-0 w-80 max-w-[85vw] bg-white z-50 lg:hidden shadow-xl">
             <div className="flex flex-col h-full">
-              {/* Header del menú móvil */}
               <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
-                {/*<div className="flex items-center space-x-2">
-                  <div className="w-8 h-8 bg-gradient-to-r from-purple-600 to-blue-600 rounded-lg flex items-center justify-center">
-                    <Calendar className="w-5 h-5 text-white" />
-                  </div>
-                  <span className="text-lg font-bold bg-gradient-to-r from-purple-600 to-blue-600 bg-clip-text text-transparent">
-                    AgendaChile
-                  </span>
-                </div>*/}
                 <button
                   onClick={handleMobileMenuClose}
                   className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
@@ -192,7 +197,6 @@ export function Sidebar() {
                 </button>
               </div>
 
-              {/* Navegación móvil */}
               <nav className="flex-1 px-4 py-6 space-y-2 overflow-y-auto">
                 {filteredNavigation.map((item) => {
                   const isActive = pathname === item.href || pathname.startsWith(item.href + '/');
@@ -218,7 +222,6 @@ export function Sidebar() {
                 })}
               </nav>
 
-              {/* Usuario y Cerrar Sesión móvil */}
               <div className="px-4 py-4 border-t border-gray-200">
                 <div className="flex items-center space-x-3 mb-4 px-4 py-3 bg-gray-50 rounded-lg">
                   <div className="w-10 h-10 bg-gradient-to-r from-purple-500 to-blue-500 rounded-full flex items-center justify-center">
@@ -238,15 +241,6 @@ export function Sidebar() {
                   </div>
                 </div>
                 
-                <Link
-                  href="/settings"
-                  onClick={handleMobileMenuClose}
-                  className="flex items-center w-full px-4 py-3 text-sm text-gray-700 rounded-lg hover:bg-gray-50 transition-colors mb-2"
-                >
-                  <Settings className="mr-3 h-4 w-4" />
-                  Configuración
-                </Link>
-
                 <button
                   onClick={() => {
                     handleMobileMenuClose();

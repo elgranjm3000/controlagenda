@@ -19,7 +19,7 @@ import {
   ToggleRight,
   X,
 } from 'lucide-react';
-import { formatCurrency } from '@/lib/utils';
+import { formatCurrency, formatCLP } from '@/lib/utils';
 import { api } from '@/lib/api';
 import { Service } from '@/types';
 
@@ -396,7 +396,7 @@ export default function ServicesPage() {
               <div>
                 <p className="text-sm font-medium text-muted-foreground">Precio Promedio</p>
                 <p className="text-2xl font-bold">
-                  {formatCurrency(services.reduce((sum, s) => sum + s.price, 0) / services.length || 0)}
+                  {formatCLP(services.reduce((sum, s) => sum + s.price, 0) / services.length || 0)}
                 </p>
                 <div className="flex items-center text-sm text-green-600">
                   <span>Por servicio</span>
@@ -547,7 +547,7 @@ export default function ServicesPage() {
                         </div>
                         <div className="flex items-center text-lg font-bold text-gray-900">
                           <DollarSign className="w-4 h-4 mr-1" />
-                          <span>{formatCurrency(service.price)}</span>
+                          <span>{formatCLP(service.price)}</span>
                         </div>
                       </div>
 
@@ -610,7 +610,7 @@ export default function ServicesPage() {
                       </div>
                       <div className="flex justify-between">
                         <span className="text-gray-600">Precio promedio:</span>
-                        <span className="font-medium">{formatCurrency(avgPrice)}</span>
+                        <span className="font-medium">{formatCLP(avgPrice)}</span>
                       </div>
                     </div>
                   </div>
